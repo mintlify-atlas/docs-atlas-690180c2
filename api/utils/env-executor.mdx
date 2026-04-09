@@ -1,0 +1,224 @@
+---
+title: "EnvExecutor"
+description: "Utilities for safely executing environment-specific code and converting between platform-agnostic and platform-specific environment types."
+---
+
+`EnvExecutor` is a final utility class in `dev.architectury.utils` that lets you run code conditionally based on the current environment (client or server). It also includes the `Env` enum used throughout Architectury API for platform-agnostic environment representation.
+
+## Why you need EnvExecutor
+
+A plain `if`-check on the environment is not sufficient for code that references client-only classes:
+
+```java
+// UNSAFE — the server JVM will fail to load ClientOnlyClass even if the
+// condition is never true, because the class is referenced at compile-time.
+if (Platform.getEnvironment() == Env.CLIENT) {
+    ClientOnlyClass.doSomething();
+}
+```
+
+<Warning>
+  The JVM loads all classes referenced in a method when that method is first executed, regardless of branching. If `ClientOnlyClass` does not exist on the server, the entire method fails with a `ClassNotFoundException` at runtime — not at the point where the class is actually used.
+</Warning>
+
+`EnvExecutor` sidesteps this by accepting a `Supplier<Runnable>` (or `Supplier<Supplier<T>>`). The inner lambda is only **constructed** (and its class references resolved) when the supplier is invoked, which only happens in the correct environment.
+
+```java
+// SAFE — the lambda body is not loaded on the server.
+EnvExecutor.runInEnv(Env.CLIENT, () -> () -> {
+    ClientOnlyClass.doSomething();
+});
+```
+
+<Note>
+  The double-lambda pattern (`() -> () -> { ... }`) is intentional. The outer `Supplier` is evaluated first to check the environment; the inner `Runnable` is only created if the environment matches, deferring class loading.
+</Note>
+
+---
+
+## EnvExecutor
+
+### `runInEnv(Env, Supplier<Runnable>)`
+
+```java
+public static void runInEnv(Env type, Supplier<Runnable> runnableSupplier)
+```
+
+Runs the given `Runnable` only when the current environment matches `type`.
+
+<ParamField path="type" type="Env" required>
+  The environment in which to run the code — `Env.CLIENT` or `Env.SERVER`.
+</ParamField>
+
+<ParamField path="runnableSupplier" type="Supplier<Runnable>" required>
+  A supplier that returns the `Runnable` to execute. The supplier is only called when the environment matches, so client-only classes inside the lambda are safe from server-side class loading.
+</ParamField>
+
+**Example — client-only initialization:**
+
+```java
+EnvExecutor.runInEnv(Env.CLIENT, () -> () -> {
+    // Safe to reference Minecraft or other client-only classes here
+    Minecraft.getInstance().tell(() -> System.out.println("Hello from the client!"));
+});
+```
+
+---
+
+### `runInEnv(EnvType, Supplier<Runnable>)`
+
+```java
+public static void runInEnv(EnvType type, Supplier<Runnable> runnableSupplier)
+```
+
+Overload that accepts the platform-specific `EnvType` (remapped to `Dist` on Forge). Internally converts to `Env` and delegates to the primary overload.
+
+<ParamField path="type" type="EnvType" required>
+  The platform-specific environment type. Use `Env`-based overload in cross-platform code.
+</ParamField>
+
+<ParamField path="runnableSupplier" type="Supplier<Runnable>" required>
+  A supplier that returns the `Runnable` to execute.
+</ParamField>
+
+---
+
+### `getInEnv(Env, Supplier<Supplier<T>>)`
+
+```java
+public static <T> Optional<T> getInEnv(Env type, Supplier<Supplier<T>> runnableSupplier)
+```
+
+Returns a value produced by the supplier only in the specified environment, or `Optional.empty()` in any other environment.
+
+<ParamField path="type" type="Env" required>
+  The environment in which to compute the value.
+</ParamField>
+
+<ParamField path="runnableSupplier" type="Supplier<Supplier<T>>" required>
+  A supplier that returns a value supplier. Both levels of wrapping are required so that the inner supplier (and any client-only classes it references) is only constructed in the correct environment.
+</ParamField>
+
+**Returns:** `Optional<T>` — the computed value wrapped in an `Optional`, or `Optional.empty()` if the environment does not match or the supplier returns `null`.
+
+---
+
+### `getInEnv(EnvType, Supplier<Supplier<T>>)`
+
+```java
+public static <T> Optional<T> getInEnv(EnvType type, Supplier<Supplier<T>> runnableSupplier)
+```
+
+Overload that accepts the platform-specific `EnvType`. Internally converts to `Env` and delegates to the primary overload.
+
+---
+
+### `getEnvSpecific(Supplier<Supplier<T>>, Supplier<Supplier<T>>)`
+
+```java
+public static <T> T getEnvSpecific(Supplier<Supplier<T>> client, Supplier<Supplier<T>> server)
+```
+
+Returns a value from one of two suppliers depending on the current environment. Unlike `getInEnv`, this method always produces a value — it never returns `Optional.empty()`.
+
+<ParamField path="client" type="Supplier<Supplier<T>>" required>
+  Supplier invoked when running on the client.
+</ParamField>
+
+<ParamField path="server" type="Supplier<Supplier<T>>" required>
+  Supplier invoked when running on the server.
+</ParamField>
+
+**Returns:** `T` — the value produced by whichever supplier matches the current environment.
+
+**Example — choosing an implementation based on environment:**
+
+```java
+SomeService service = EnvExecutor.getEnvSpecific(
+    () -> () -> new ClientSomeService(),
+    () -> () -> new ServerSomeService()
+);
+```
+
+---
+
+## Env
+
+`Env` is an enum in `dev.architectury.utils` that represents the game environment in a platform-agnostic way. It is the preferred type to use in cross-platform code instead of `EnvType` or `Dist`.
+
+### Values
+
+| Value | Description |
+|---|---|
+| `CLIENT` | The game is running as a Minecraft client. |
+| `SERVER` | The game is running as a dedicated server. |
+
+---
+
+### `Env.fromPlatform(Object type)`
+
+```java
+public static Env fromPlatform(Object type)
+```
+
+Converts a platform-specific environment enum value (`EnvType` on Fabric, `Dist` on Forge) to the corresponding `Env` value.
+
+<ParamField path="type" type="Object" required>
+  A platform-specific environment value — either `net.fabricmc.api.EnvType` or `net.minecraftforge.api.distmarker.Dist`.
+</ParamField>
+
+**Returns:** `Env.CLIENT`, `Env.SERVER`, or `null` if the value is unrecognized.
+
+---
+
+### `Env#toPlatform()`
+
+```java
+public EnvType toPlatform()
+```
+
+Converts this `Env` value back to the platform-specific `EnvType` (remapped to `Dist` on Forge).
+
+**Returns:** `EnvType` (or `Dist` on Forge)
+
+---
+
+## GameInstance
+
+`GameInstance` is a companion utility class in `dev.architectury.utils` that provides direct access to the running Minecraft instance objects.
+
+### `getClient()`
+
+```java
+@Environment(EnvType.CLIENT)
+public static Minecraft getClient()
+```
+
+Returns the `Minecraft` singleton. This method is client-only; call it only in client-side code.
+
+**Returns:** `net.minecraft.client.Minecraft`
+
+---
+
+### `getServer()`
+
+```java
+@Nullable
+@ExpectPlatform
+public static MinecraftServer getServer()
+```
+
+Returns the currently running `MinecraftServer`, or `null` if no server is active (for example, when the client is on the main menu).
+
+**Returns:** `net.minecraft.server.MinecraftServer` or `null`
+
+**Example — safely ticking on the server:**
+
+```java
+MinecraftServer server = GameInstance.getServer();
+if (server != null) {
+    server.tell(new TickTask(server.getTickCount(), () -> {
+        // runs on the server thread
+    }));
+}
+```

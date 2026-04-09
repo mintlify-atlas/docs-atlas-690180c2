@@ -1,0 +1,335 @@
+---
+title: 'Player events'
+description: 'Events for server-side player actions: joining, quitting, respawning, crafting, item interaction, and more.'
+keywords: ['player', 'PlayerEvent', 'join', 'quit', 'respawn', 'crafting', 'item drop', 'bucket', 'attack']
+---
+
+`dev.architectury.event.events.common.PlayerEvent`
+
+All events listed here are server-side unless otherwise noted. The listener type and method signature are extracted from the source interfaces.
+
+---
+
+## Event reference
+
+<AccordionGroup>
+  <Accordion title="PLAYER_JOIN — Event&lt;PlayerEvent.PlayerJoin&gt;">
+    Invoked after a player joins a server level.
+
+    **Listener interface:** `PlayerEvent.PlayerJoin`
+
+    ```java
+    void join(ServerPlayer player);
+    ```
+
+    | Parameter | Type | Description |
+    |---|---|---|
+    | `player` | `ServerPlayer` | The player who joined. |
+
+    **Forge equivalent:** `PlayerLoggedInEvent`
+  </Accordion>
+
+  <Accordion title="PLAYER_QUIT — Event&lt;PlayerEvent.PlayerQuit&gt;">
+    Invoked after a player logs out of a server level.
+
+    **Listener interface:** `PlayerEvent.PlayerQuit`
+
+    ```java
+    void quit(ServerPlayer player);
+    ```
+
+    | Parameter | Type | Description |
+    |---|---|---|
+    | `player` | `ServerPlayer` | The player who logged out. |
+
+    **Forge equivalent:** `PlayerLoggedOutEvent`
+  </Accordion>
+
+  <Accordion title="PLAYER_RESPAWN — Event&lt;PlayerEvent.PlayerRespawn&gt;">
+    Invoked when a player is respawned (e.g., after dying or leaving the End). To copy data to the new player object, use `PLAYER_CLONE` instead.
+
+    **Listener interface:** `PlayerEvent.PlayerRespawn`
+
+    ```java
+    void respawn(ServerPlayer newPlayer, boolean conqueredEnd);
+    ```
+
+    | Parameter | Type | Description |
+    |---|---|---|
+    | `newPlayer` | `ServerPlayer` | The newly created player instance. |
+    | `conqueredEnd` | `boolean` | `true` when the player completed the End and is returning to the overworld. |
+
+    **Forge equivalent:** `PlayerRespawnEvent`
+  </Accordion>
+
+  <Accordion title="PLAYER_CLONE — Event&lt;PlayerEvent.PlayerClone&gt;">
+    Invoked when the player object is recreated at respawn. Use this to transfer custom data from the old player to the new one.
+
+    **Listener interface:** `PlayerEvent.PlayerClone`
+
+    ```java
+    void clone(ServerPlayer oldPlayer, ServerPlayer newPlayer, boolean wonGame);
+    ```
+
+    | Parameter | Type | Description |
+    |---|---|---|
+    | `oldPlayer` | `ServerPlayer` | The player instance before respawn. |
+    | `newPlayer` | `ServerPlayer` | The player instance after respawn. |
+    | `wonGame` | `boolean` | `true` when the player completed the End. |
+
+    **Forge equivalent:** `PlayerEvent.Clone`
+  </Accordion>
+
+  <Accordion title="PLAYER_ADVANCEMENT — Event&lt;PlayerEvent.PlayerAdvancement&gt;">
+    Invoked when a player earns an advancement.
+
+    **Listener interface:** `PlayerEvent.PlayerAdvancement`
+
+    ```java
+    void award(ServerPlayer player, Advancement advancement);
+    ```
+
+    | Parameter | Type | Description |
+    |---|---|---|
+    | `player` | `ServerPlayer` | The player who earned the advancement. |
+    | `advancement` | `Advancement` | The advancement that was awarded. |
+
+    **Forge equivalent:** `AdvancementEvent`
+  </Accordion>
+
+  <Accordion title="CRAFT_ITEM — Event&lt;PlayerEvent.CraftItem&gt;">
+    Invoked when a player takes a crafted item from the result slot of a vanilla crafting table or player inventory crafting grid.
+
+    **Listener interface:** `PlayerEvent.CraftItem`
+
+    ```java
+    void craft(Player player, ItemStack constructed, Container inventory);
+    ```
+
+    | Parameter | Type | Description |
+    |---|---|---|
+    | `player` | `Player` | The crafting player. |
+    | `constructed` | `ItemStack` | The item that was crafted. |
+    | `inventory` | `Container` | The crafting inventory. |
+
+    **Forge equivalent:** `ItemCraftedEvent`
+  </Accordion>
+
+  <Accordion title="SMELT_ITEM — Event&lt;PlayerEvent.SmeltItem&gt;">
+    Invoked when a player takes the result of a smelt operation from the output slot.
+
+    **Listener interface:** `PlayerEvent.SmeltItem`
+
+    ```java
+    void smelt(Player player, ItemStack smelted);
+    ```
+
+    | Parameter | Type | Description |
+    |---|---|---|
+    | `player` | `Player` | The player collecting the smelted item. |
+    | `smelted` | `ItemStack` | The smelting result stack. |
+
+    **Forge equivalent:** `ItemSmeltedEvent`
+  </Accordion>
+
+  <Accordion title="PICKUP_ITEM_PRE — Event&lt;PlayerEvent.PickupItemPredicate&gt;">
+    Invoked when a player tries to pick up an `ItemEntity`. Return an interrupting `EventResult` to prevent the pickup.
+
+    **Listener interface:** `PlayerEvent.PickupItemPredicate`
+
+    ```java
+    EventResult canPickup(Player player, ItemEntity entity, ItemStack stack);
+    ```
+
+    | Parameter | Type | Description |
+    |---|---|---|
+    | `player` | `Player` | The player attempting to pick up the item. |
+    | `entity` | `ItemEntity` | The item entity on the ground. |
+    | `stack` | `ItemStack` | The contents of the item entity. |
+
+    **Returns:** `EventResult` — return `EventResult.interruptFalse()` to cancel pickup.
+
+    **Forge equivalent:** `EntityItemPickupEvent`
+  </Accordion>
+
+  <Accordion title="PICKUP_ITEM_POST — Event&lt;PlayerEvent.PickupItem&gt;">
+    Invoked after a player has successfully picked up an `ItemEntity`.
+
+    **Listener interface:** `PlayerEvent.PickupItem`
+
+    ```java
+    void pickup(Player player, ItemEntity entity, ItemStack stack);
+    ```
+
+    | Parameter | Type | Description |
+    |---|---|---|
+    | `player` | `Player` | The player who picked up the item. |
+    | `entity` | `ItemEntity` | The item entity that was picked up. |
+    | `stack` | `ItemStack` | The contents of the item entity. |
+
+    **Forge equivalent:** `ItemPickupEvent`
+  </Accordion>
+
+  <Accordion title="CHANGE_DIMENSION — Event&lt;PlayerEvent.ChangeDimension&gt;">
+    Invoked when a player teleports between dimensions.
+
+    **Listener interface:** `PlayerEvent.ChangeDimension`
+
+    ```java
+    void change(ServerPlayer player, ResourceKey<Level> oldLevel, ResourceKey<Level> newLevel);
+    ```
+
+    | Parameter | Type | Description |
+    |---|---|---|
+    | `player` | `ServerPlayer` | The teleporting player. |
+    | `oldLevel` | `ResourceKey<Level>` | The dimension the player is leaving. |
+    | `newLevel` | `ResourceKey<Level>` | The dimension the player is entering. |
+
+    **Forge equivalent:** `PlayerChangedDimensionEvent`
+  </Accordion>
+
+  <Accordion title="DROP_ITEM — Event&lt;PlayerEvent.DropItem&gt;">
+    Invoked when a player drops an item. Return an interrupting `EventResult` to cancel the drop.
+
+    **Listener interface:** `PlayerEvent.DropItem`
+
+    ```java
+    EventResult drop(Player player, ItemEntity entity);
+    ```
+
+    | Parameter | Type | Description |
+    |---|---|---|
+    | `player` | `Player` | The player dropping the item. |
+    | `entity` | `ItemEntity` | The item entity spawned by the drop. |
+
+    **Returns:** `EventResult` — return `EventResult.interruptFalse()` to cancel.
+
+    **Forge equivalent:** `ItemTossEvent`
+  </Accordion>
+
+  <Accordion title="OPEN_MENU — Event&lt;PlayerEvent.OpenMenu&gt;">
+    Invoked when a player opens a container menu.
+
+    **Listener interface:** `PlayerEvent.OpenMenu`
+
+    ```java
+    void open(Player player, AbstractContainerMenu menu);
+    ```
+
+    | Parameter | Type | Description |
+    |---|---|---|
+    | `player` | `Player` | The player opening the menu. |
+    | `menu` | `AbstractContainerMenu` | The menu that was opened. |
+
+    **Forge equivalent:** `PlayerContainerEvent.Open`
+  </Accordion>
+
+  <Accordion title="CLOSE_MENU — Event&lt;PlayerEvent.CloseMenu&gt;">
+    Invoked when a player closes a container menu.
+
+    **Listener interface:** `PlayerEvent.CloseMenu`
+
+    ```java
+    void close(Player player, AbstractContainerMenu menu);
+    ```
+
+    | Parameter | Type | Description |
+    |---|---|---|
+    | `player` | `Player` | The player closing the menu. |
+    | `menu` | `AbstractContainerMenu` | The menu that was closed. |
+
+    **Forge equivalent:** `PlayerContainerEvent.Close`
+  </Accordion>
+
+  <Accordion title="FILL_BUCKET — Event&lt;PlayerEvent.FillBucket&gt;">
+    Invoked when a player attempts to fill a bucket with right-click. Return a non-passing `CompoundEventResult` to override the filled stack.
+
+    **Listener interface:** `PlayerEvent.FillBucket`
+
+    ```java
+    CompoundEventResult<ItemStack> fill(
+        Player player,
+        Level level,
+        ItemStack stack,
+        @Nullable HitResult target
+    );
+    ```
+
+    | Parameter | Type | Description |
+    |---|---|---|
+    | `player` | `Player` | The player filling the bucket. |
+    | `level` | `Level` | The level the player is in. |
+    | `stack` | `ItemStack` | The bucket stack. |
+    | `target` | `@Nullable HitResult` | The ray-cast target, or `null`. |
+
+    **Returns:** `CompoundEventResult<ItemStack>` — return `CompoundEventResult.interruptTrue(filledStack)` to provide a replacement result.
+  </Accordion>
+
+  <Accordion title="ATTACK_ENTITY — Event&lt;PlayerEvent.AttackEntity&gt;">
+    Invoked when a player is about to attack an entity with left-click. Return an interrupting `EventResult` to cancel the attack.
+
+    **Listener interface:** `PlayerEvent.AttackEntity`
+
+    ```java
+    EventResult attack(
+        Player player,
+        Level level,
+        Entity target,
+        InteractionHand hand,
+        @Nullable EntityHitResult result
+    );
+    ```
+
+    | Parameter | Type | Description |
+    |---|---|---|
+    | `player` | `Player` | The attacking player. |
+    | `level` | `Level` | The level the player is in. |
+    | `target` | `Entity` | The entity about to be attacked. |
+    | `hand` | `InteractionHand` | The hand used for the attack. |
+    | `result` | `@Nullable EntityHitResult` | The entity hit result, or `null`. |
+
+    **Returns:** `EventResult` — return `EventResult.interruptFalse()` to cancel the attack.
+
+    **Forge equivalent:** `AttackEntityEvent`
+    **Fabric equivalent:** `AttackEntityCallback`
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## Usage examples
+
+### Greeting players on join
+
+```java
+PlayerEvent.PLAYER_JOIN.register(player -> {
+    player.sendSystemMessage(
+        Component.literal("Welcome, " + player.getGameProfile().getName() + "!")
+    );
+});
+```
+
+### Cancelling item drops
+
+```java
+PlayerEvent.DROP_ITEM.register((player, entity) -> {
+    ItemStack stack = entity.getItem();
+    if (stack.is(Items.DIAMOND)) {
+        // Prevent the player from dropping diamonds
+        return EventResult.interruptFalse();
+    }
+    return EventResult.pass();
+});
+```
+
+### Copying custom data on respawn
+
+```java
+PlayerEvent.PLAYER_CLONE.register((oldPlayer, newPlayer, wonGame) -> {
+    CompoundTag oldData = oldPlayer.getPersistentData();
+    CompoundTag newData = newPlayer.getPersistentData();
+    if (oldData.contains("MyMod:customValue")) {
+        newData.put("MyMod:customValue", oldData.get("MyMod:customValue"));
+    }
+});
+```

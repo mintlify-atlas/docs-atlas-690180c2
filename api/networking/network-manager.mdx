@@ -1,0 +1,332 @@
+---
+title: "NetworkManager"
+description: "Low-level, platform-agnostic API for sending and receiving custom network packets between server and client."
+keywords: ["NetworkManager", "networking", "packets", "S2C", "C2S", "Fabric", "Forge"]
+---
+
+`NetworkManager` is the low-level networking API in Architectury. It lets you register packet receivers and send `FriendlyByteBuf`-based packets between the server and client using a `ResourceLocation` as the channel identifier.
+
+For a higher-level, message-class-based approach similar to Forge's `SimpleChannel`, see [`NetworkChannel`](/api/networking/network-channel).
+
+---
+
+## `Side` enum
+
+Packets are directional. Use `Side` to specify which direction a packet travels.
+
+| Constant | Direction | Helper methods |
+|---|---|---|
+| `Side.S2C` | Server → Client | `NetworkManager.s2c()`, `NetworkManager.serverToClient()` |
+| `Side.C2S` | Client → Server | `NetworkManager.c2s()`, `NetworkManager.clientToServer()` |
+
+```java
+NetworkManager.Side s2c = NetworkManager.s2c();       // server to client
+NetworkManager.Side c2s = NetworkManager.clientToServer(); // client to server
+```
+
+---
+
+## Registering receivers
+
+### `registerReceiver(Side side, ResourceLocation id, NetworkReceiver receiver)`
+
+Registers a packet receiver for the given direction and channel ID. Call this once during mod initialisation (on both sides for `S2C` receivers, on the server side for `C2S` receivers).
+
+<ParamField path="side" type="Side" required>
+  The direction the packet travels. `Side.S2C` for packets sent to clients; `Side.C2S` for packets sent to the server.
+</ParamField>
+
+<ParamField path="id" type="ResourceLocation" required>
+  A unique identifier for this packet channel.
+</ParamField>
+
+<ParamField path="receiver" type="NetworkReceiver" required>
+  The handler invoked when a packet is received.
+</ParamField>
+
+```java
+NetworkManager.registerReceiver(
+    NetworkManager.s2c(),
+    new ResourceLocation("mymod", "sync_data"),
+    (buf, context) -> {
+        String message = buf.readUtf();
+        context.queue(() -> {
+            // Run on the main thread
+            System.out.println("Received: " + message);
+        });
+    }
+);
+```
+
+---
+
+### `registerReceiver(Side side, ResourceLocation id, List<PacketTransformer> packetTransformers, NetworkReceiver receiver)`
+
+Advanced overload that applies a list of `PacketTransformer` instances before the receiver is called. Useful for splitting large packets or applying compression. Marked `@ApiStatus.Experimental`.
+
+<ParamField path="side" type="Side" required>
+  Packet direction.
+</ParamField>
+
+<ParamField path="id" type="ResourceLocation" required>
+  Channel identifier.
+</ParamField>
+
+<ParamField path="packetTransformers" type="List<PacketTransformer>" required>
+  Ordered list of transformers applied to the packet before it reaches the receiver. Pass `Collections.emptyList()` for no transformation.
+</ParamField>
+
+<ParamField path="receiver" type="NetworkReceiver" required>
+  The handler invoked after transformation.
+</ParamField>
+
+---
+
+## Sending packets
+
+### `sendToPlayer(ServerPlayer player, ResourceLocation id, FriendlyByteBuf buf)`
+
+Sends an `S2C` packet to a single connected player.
+
+<ParamField path="player" type="ServerPlayer" required>
+  The target player.
+</ParamField>
+
+<ParamField path="id" type="ResourceLocation" required>
+  Channel identifier. Must match the ID used in `registerReceiver`.
+</ParamField>
+
+<ParamField path="buf" type="FriendlyByteBuf" required>
+  The packet payload.
+</ParamField>
+
+```java
+FriendlyByteBuf buf = new FriendlyByteBuf(Unpooled.buffer());
+buf.writeUtf("Hello, client!");
+NetworkManager.sendToPlayer(serverPlayer, new ResourceLocation("mymod", "sync_data"), buf);
+```
+
+---
+
+### `sendToPlayers(Iterable<ServerPlayer> players, ResourceLocation id, FriendlyByteBuf buf)`
+
+Sends the same `S2C` packet to multiple players efficiently.
+
+<ParamField path="players" type="Iterable<ServerPlayer>" required>
+  The target players.
+</ParamField>
+
+<ParamField path="id" type="ResourceLocation" required>
+  Channel identifier.
+</ParamField>
+
+<ParamField path="buf" type="FriendlyByteBuf" required>
+  The packet payload.
+</ParamField>
+
+```java
+NetworkManager.sendToPlayers(
+    level.players(),
+    new ResourceLocation("mymod", "world_event"),
+    buf
+);
+```
+
+---
+
+### `sendToServer(ResourceLocation id, FriendlyByteBuf buf)` — client only
+
+Sends a `C2S` packet to the server. Only available on the client (`@Environment(EnvType.CLIENT)`).
+
+<Warning>
+  This method can only be called from client-side code. Invoking it from common or server code will cause a crash. Guard calls with `Platform.getEnvironment() == Env.CLIENT` or use `EnvExecutor`.
+</Warning>
+
+<ParamField path="id" type="ResourceLocation" required>
+  Channel identifier.
+</ParamField>
+
+<ParamField path="buf" type="FriendlyByteBuf" required>
+  The packet payload.
+</ParamField>
+
+```java
+FriendlyByteBuf buf = new FriendlyByteBuf(Unpooled.buffer());
+buf.writeInt(selectedSlot);
+NetworkManager.sendToServer(new ResourceLocation("mymod", "select_slot"), buf);
+```
+
+---
+
+## Capability checks
+
+### `canServerReceive(ResourceLocation id)` — client only
+
+Returns `true` if the connected server has registered a receiver for the given channel ID. Use this before sending a `C2S` packet to avoid silent drops on servers without your mod.
+
+<ParamField path="id" type="ResourceLocation" required>
+  The channel ID to check.
+</ParamField>
+
+```java
+if (NetworkManager.canServerReceive(new ResourceLocation("mymod", "select_slot"))) {
+    NetworkManager.sendToServer(new ResourceLocation("mymod", "select_slot"), buf);
+}
+```
+
+---
+
+### `canPlayerReceive(ServerPlayer player, ResourceLocation id)`
+
+Returns `true` if the given player's client has registered a receiver for the channel ID. Use this before sending an `S2C` packet to avoid errors when the client does not have your mod.
+
+<ParamField path="player" type="ServerPlayer" required>
+  The player to check.
+</ParamField>
+
+<ParamField path="id" type="ResourceLocation" required>
+  The channel ID to check.
+</ParamField>
+
+```java
+if (NetworkManager.canPlayerReceive(player, new ResourceLocation("mymod", "sync_data"))) {
+    NetworkManager.sendToPlayer(player, new ResourceLocation("mymod", "sync_data"), buf);
+}
+```
+
+---
+
+## Low-level packet collection
+
+### `collectPackets(PacketSink sink, Side side, ResourceLocation id, FriendlyByteBuf buf)`
+
+Converts a payload into one or more `Packet<?>` objects and sends them to `sink`. This is the underlying implementation of `sendToPlayer` and `sendToServer`. Prefer the higher-level send methods unless you need direct control over packet routing.
+
+<ParamField path="sink" type="PacketSink" required>
+  The destination. Use `PacketSink.ofPlayer(player)`, `PacketSink.ofPlayers(players)`, or `PacketSink.client()`.
+</ParamField>
+
+<ParamField path="side" type="Side" required>
+  Packet direction.
+</ParamField>
+
+<ParamField path="id" type="ResourceLocation" required>
+  Channel identifier.
+</ParamField>
+
+<ParamField path="buf" type="FriendlyByteBuf" required>
+  The packet payload.
+</ParamField>
+
+---
+
+## Custom entity spawn packets
+
+### `createAddEntityPacket(Entity entity)`
+
+Creates a `Packet<?>` suitable for spawning a custom (non-living) entity on the client. Override `Entity#getAddEntityPacket()` to return the result of this method.
+
+Entities can also implement `dev.architectury.extensions.network.EntitySpawnExtension` to write and read additional spawn data.
+
+<ParamField path="entity" type="Entity" required>
+  The entity to spawn.
+</ParamField>
+
+```java
+public class MyCustomEntity extends Entity {
+    @Override
+    public Packet<?> getAddEntityPacket() {
+        return NetworkManager.createAddEntityPacket(this);
+    }
+}
+```
+
+<Note>
+  `createAddEntityPacket` is only needed for entities that do **not** extend `LivingEntity`. Living entities already have their own spawn packet handling.
+</Note>
+
+---
+
+## `NetworkReceiver` interface
+
+`NetworkReceiver` is a `@FunctionalInterface` with a single method:
+
+```java
+@FunctionalInterface
+public interface NetworkReceiver {
+    void receive(FriendlyByteBuf buf, PacketContext context);
+}
+```
+
+<ResponseField name="buf" type="FriendlyByteBuf">
+  The packet payload to decode.
+</ResponseField>
+
+<ResponseField name="context" type="PacketContext">
+  Provides access to the receiving player and thread-safe execution.
+</ResponseField>
+
+---
+
+## `PacketContext`
+
+`PacketContext` is provided to every `NetworkReceiver`. It gives you access to the receiving player and a way to schedule work on the main game thread.
+
+<ResponseField name="getPlayer()" type="Player">
+  Returns the player involved in the packet exchange. For `S2C` packets this is the local client player; for `C2S` packets this is the `ServerPlayer` who sent the packet.
+</ResponseField>
+
+<ResponseField name="queue(Runnable runnable)" type="void">
+  Schedules a `Runnable` to run on the main game thread. Packet receivers run on the network thread — always use `queue` before touching any game state.
+</ResponseField>
+
+<ResponseField name="getEnvironment()" type="Env">
+  Returns the `Env` of the receiving side (`Env.CLIENT` or `Env.SERVER`).
+</ResponseField>
+
+<ResponseField name="getEnv()" type="EnvType">
+  Convenience method. Returns `getEnvironment().toPlatform()` as a Fabric `EnvType`.
+</ResponseField>
+
+---
+
+## Complete example
+
+The following example registers an `S2C` packet that sends a message string from the server to a client.
+
+```java
+import dev.architectury.networking.NetworkManager;
+import io.netty.buffer.Unpooled;
+import net.minecraft.network.FriendlyByteBuf;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.server.level.ServerPlayer;
+
+public class MyNetworking {
+    public static final ResourceLocation SYNC_MESSAGE =
+        new ResourceLocation("mymod", "sync_message");
+
+    // Register on both sides during mod init
+    public static void init() {
+        NetworkManager.registerReceiver(
+            NetworkManager.s2c(),
+            SYNC_MESSAGE,
+            (buf, context) -> {
+                String text = buf.readUtf();
+                context.queue(() -> {
+                    // Safe to access game state here
+                    System.out.println("[Client] Server says: " + text);
+                });
+            }
+        );
+    }
+
+    // Call from server-side code
+    public static void sendMessage(ServerPlayer player, String message) {
+        if (NetworkManager.canPlayerReceive(player, SYNC_MESSAGE)) {
+            FriendlyByteBuf buf = new FriendlyByteBuf(Unpooled.buffer());
+            buf.writeUtf(message);
+            NetworkManager.sendToPlayer(player, SYNC_MESSAGE, buf);
+        }
+    }
+}
+```

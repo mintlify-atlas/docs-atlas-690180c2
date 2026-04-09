@@ -1,0 +1,257 @@
+---
+title: "Platform"
+description: "Static utility class for querying the current mod loader, Minecraft version, environment, and loaded mods."
+---
+
+The `Platform` class is a final utility class in `dev.architectury.platform`. All methods are static. It provides a single, platform-agnostic API for tasks that would otherwise require separate code paths on Fabric and Forge.
+
+<Note>
+  Methods annotated with `@ExpectPlatform` have their implementations injected at runtime by the Architectury transformer. The method bodies in the common source throw `AssertionError` and are never executed directly.
+</Note>
+
+## Loader detection
+
+### `isFabric()`
+
+```java
+public static boolean isFabric()
+```
+
+Returns `true` when the current mod loader is Fabric (or a Fabric-compatible loader such as Quilt).
+
+**Returns:** `boolean`
+
+---
+
+### `isForge()`
+
+```java
+public static boolean isForge()
+```
+
+Returns `true` when the current mod loader is Forge.
+
+**Returns:** `boolean`
+
+**Example — conditional logic per loader:**
+
+```java
+if (Platform.isFabric()) {
+    // Fabric-specific setup
+} else if (Platform.isForge()) {
+    // Forge-specific setup
+}
+```
+
+---
+
+## Minecraft version
+
+### `getMinecraftVersion()`
+
+```java
+public static String getMinecraftVersion()
+```
+
+Returns the current Minecraft version string, sourced from `SharedConstants`.
+
+**Returns:** `String` — for example, `"1.20.1"`
+
+---
+
+## File system paths
+
+All path methods return an **absolute**, **normalized** `java.nio.file.Path`.
+
+### `getGameFolder()`
+
+```java
+@ExpectPlatform
+public static Path getGameFolder()
+```
+
+Returns the root directory of the current Minecraft instance (the `.minecraft` folder, or the server's working directory).
+
+**Returns:** `Path`
+
+---
+
+### `getConfigFolder()`
+
+```java
+@ExpectPlatform
+public static Path getConfigFolder()
+```
+
+Returns the `config` directory inside the game folder.
+
+**Returns:** `Path`
+
+---
+
+### `getModsFolder()`
+
+```java
+@ExpectPlatform
+public static Path getModsFolder()
+```
+
+Returns the `mods` directory inside the game folder.
+
+**Returns:** `Path`
+
+**Example — resolving a path inside the config folder:**
+
+```java
+Path myConfig = Platform.getConfigFolder().resolve("my-mod/settings.json");
+```
+
+---
+
+## Environment
+
+### `getEnvironment()`
+
+```java
+@ExpectPlatform
+public static Env getEnvironment()
+```
+
+Returns the current environment as the platform-agnostic [`Env`](/api/utils/env-executor#env) enum, which is either `Env.CLIENT` or `Env.SERVER`.
+
+**Returns:** [`Env`](/api/utils/env-executor#env)
+
+---
+
+### `getEnv()`
+
+```java
+@ExpectPlatform
+public static EnvType getEnv()
+```
+
+Returns the current environment as the platform-specific `EnvType` enum. On Forge this is remapped to `net.minecraftforge.api.distmarker.Dist` at compile time.
+
+Prefer [`getEnvironment()`](#getenvironment) in cross-platform code to avoid dealing with the remapping.
+
+**Returns:** `EnvType` (remapped to `Dist` on Forge)
+
+---
+
+### `isDevelopmentEnvironment()`
+
+```java
+@ExpectPlatform
+public static boolean isDevelopmentEnvironment()
+```
+
+Returns `true` when the game is running inside a development environment (i.e. launched from an IDE or Gradle run task).
+
+**Returns:** `boolean`
+
+---
+
+## Mod queries
+
+### `isModLoaded(String id)`
+
+```java
+@ExpectPlatform
+public static boolean isModLoaded(String id)
+```
+
+Checks whether a mod with the given mod ID is currently loaded.
+
+<ParamField path="id" type="String" required>
+  The mod ID to check, for example `"architectury"`.
+</ParamField>
+
+**Returns:** `boolean` — `true` if the mod is loaded, `false` otherwise.
+
+**Example:**
+
+```java
+if (Platform.isModLoaded("jei")) {
+    // Register JEI compatibility
+}
+```
+
+---
+
+### `getMod(String id)`
+
+```java
+@ExpectPlatform
+public static Mod getMod(String id)
+```
+
+Returns the [`Mod`](/api/platform/mod) container for the given mod ID.
+
+<ParamField path="id" type="String" required>
+  The mod ID to look up.
+</ParamField>
+
+**Returns:** [`Mod`](/api/platform/mod)
+
+**Throws:** `java.util.NoSuchElementException` if no mod with the given ID is loaded.
+
+Use [`getOptionalMod()`](#getoptionalmod-string-id) when you are not certain the mod is present.
+
+---
+
+### `getOptionalMod(String id)`
+
+```java
+public static Optional<Mod> getOptionalMod(String id)
+```
+
+Returns an `Optional` containing the [`Mod`](/api/platform/mod) container for the given mod ID, or `Optional.empty()` if the mod is not loaded.
+
+<ParamField path="id" type="String" required>
+  The mod ID to look up.
+</ParamField>
+
+**Returns:** `Optional<Mod>`
+
+**Example — reading a version only when the mod is present:**
+
+```java
+Platform.getOptionalMod("my-optional-dependency").ifPresent(mod -> {
+    String version = mod.getVersion();
+    // use version
+});
+```
+
+---
+
+### `getMods()`
+
+```java
+@ExpectPlatform
+public static Collection<Mod> getMods()
+```
+
+Returns a collection of [`Mod`](/api/platform/mod) containers for every currently-loaded mod.
+
+**Returns:** `Collection<Mod>`
+
+---
+
+### `getModIds()`
+
+```java
+@ExpectPlatform
+public static Collection<String> getModIds()
+```
+
+Returns a collection of mod ID strings for every currently-loaded mod.
+
+**Returns:** `Collection<String>`
+
+**Example — printing all loaded mod IDs:**
+
+```java
+for (String id : Platform.getModIds()) {
+    System.out.println(id);
+}
+```

@@ -1,0 +1,196 @@
+---
+title: "Registering content"
+description: "Register blocks, items, and other game objects with a single API that works on both Fabric and Forge."
+keywords: ["DeferredRegister", "Registrar", "Registries", "RegistrySupplier", "CreativeTabRegistry", "registration", "blocks", "items"]
+---
+
+Architectury API provides two ways to register content:
+
+- **`DeferredRegister`** — the recommended approach for most mods. Declare your entries as static fields and call `register()` once at mod init.
+- **`Registrar`** — a lower-level interface for advanced cases such as iterating entries, listening to registration events, or building custom registries.
+
+## Registering with DeferredRegister
+
+<Steps>
+  <Step title="Create a DeferredRegister for each registry type">
+    Call `DeferredRegister.create(modId, registryKey)` once per registry type. Store it as a `static final` field on a dedicated class.
+
+    ```java src/main/java/com/example/registry/ModBlocks.java
+    import dev.architectury.registry.registries.DeferredRegister;
+    import net.minecraft.core.Registry;
+    import net.minecraft.world.level.block.Block;
+
+    public class ModBlocks {
+        public static final DeferredRegister<Block> BLOCKS =
+            DeferredRegister.create("mymod", Registry.BLOCK_REGISTRY);
+    }
+    ```
+
+    ```java src/main/java/com/example/registry/ModItems.java
+    import dev.architectury.registry.registries.DeferredRegister;
+    import net.minecraft.core.Registry;
+    import net.minecraft.world.item.Item;
+
+    public class ModItems {
+        public static final DeferredRegister<Item> ITEMS =
+            DeferredRegister.create("mymod", Registry.ITEM_REGISTRY);
+    }
+    ```
+  </Step>
+
+  <Step title="Declare registry entries">
+    Call `register(name, supplier)` on the `DeferredRegister`. Each call returns a `RegistrySupplier<T>` that you can use to access the entry after registration.
+
+    ```java src/main/java/com/example/registry/ModBlocks.java
+    import dev.architectury.registry.registries.RegistrySupplier;
+    import net.minecraft.world.level.block.Blocks;
+    import net.minecraft.world.level.block.state.BlockBehaviour;
+
+    public class ModBlocks {
+        public static final DeferredRegister<Block> BLOCKS =
+            DeferredRegister.create("mymod", Registry.BLOCK_REGISTRY);
+
+        public static final RegistrySupplier<Block> EXAMPLE_BLOCK =
+            BLOCKS.register("example_block", () ->
+                new Block(BlockBehaviour.Properties.copy(Blocks.STONE)));
+    }
+    ```
+
+    ```java src/main/java/com/example/registry/ModItems.java
+    import dev.architectury.registry.registries.RegistrySupplier;
+
+    public class ModItems {
+        public static final DeferredRegister<Item> ITEMS =
+            DeferredRegister.create("mymod", Registry.ITEM_REGISTRY);
+
+        public static final RegistrySupplier<Item> EXAMPLE_ITEM =
+            ITEMS.register("example_item", () ->
+                new Item(new Item.Properties()));
+
+        // Register a BlockItem for the block defined in ModBlocks
+        public static final RegistrySupplier<Item> EXAMPLE_BLOCK_ITEM =
+            ITEMS.register("example_block", () ->
+                new BlockItem(ModBlocks.EXAMPLE_BLOCK.get(), new Item.Properties()));
+    }
+    ```
+  </Step>
+
+  <Step title="Call register() during mod initialization">
+    Call `register()` on every `DeferredRegister` inside your common mod initializer. You must do this before the game finishes loading — typically at the top level of your `initialize()` method.
+
+    ```java src/main/java/com/example/MyMod.java
+    public class MyMod {
+        public static void initialize() {
+            ModBlocks.BLOCKS.register();
+            ModItems.ITEMS.register();
+        }
+    }
+    ```
+
+    <Note>
+      Call `register()` only once per `DeferredRegister`. Calling it a second time throws `IllegalStateException`. On Forge, registration fires during the `RegistryEvent.Register` phase; on Fabric, it fires immediately when `register()` is called.
+    </Note>
+  </Step>
+</Steps>
+
+## Working with RegistrySupplier
+
+`RegistrySupplier<T>` is a lazy handle to a registered entry. It behaves like `Supplier<T>` but also exposes the entry's `ResourceLocation` and registration state.
+
+```java
+// Access the underlying object — safe after registration completes
+Block block = ModBlocks.EXAMPLE_BLOCK.get();
+
+// Check if the entry has been registered yet
+boolean ready = ModBlocks.EXAMPLE_BLOCK.isPresent();
+
+// Get the registry ID
+ResourceLocation id = ModBlocks.EXAMPLE_BLOCK.getId(); // mymod:example_block
+
+// Run a callback once the entry is registered
+ModBlocks.EXAMPLE_BLOCK.listen(b -> System.out.println("Registered: " + b));
+
+// Use Optional-style helpers
+ModBlocks.EXAMPLE_BLOCK.ifPresent(b -> doSomethingWith(b));
+Block orDefault = ModBlocks.EXAMPLE_BLOCK.orElse(Blocks.AIR);
+```
+
+<Warning>
+  Do not call `get()` during class initialization (i.e., in a static field initializer). Entries are not registered yet at that point and `get()` will throw `NullPointerException`. Access the object only after `register()` has been called and registration has completed.
+</Warning>
+
+## Using Registrar directly
+
+`Registrar<T>` is the lower-level interface underlying `DeferredRegister`. Use it when you need to query the registry, iterate its contents, or listen to arbitrary entries.
+
+Obtain a `Registrar` via `Registries.get(modId).get(registryKey)`:
+
+```java
+import dev.architectury.registry.registries.Registrar;
+import dev.architectury.registry.registries.Registries;
+import net.minecraft.core.Registry;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.world.item.Item;
+
+Registrar<Item> itemRegistrar = Registries.get("mymod").get(Registry.ITEM_REGISTRY);
+
+// Register an entry directly
+RegistrySupplier<Item> myItem = itemRegistrar.register(
+    new ResourceLocation("mymod", "direct_item"),
+    () -> new Item(new Item.Properties())
+);
+
+// Look up an existing entry by ID
+Item dirt = itemRegistrar.get(new ResourceLocation("minecraft", "dirt"));
+
+// Check whether an ID is registered
+boolean exists = itemRegistrar.contains(new ResourceLocation("mymod", "example_item"));
+
+// Get the raw numeric ID
+int rawId = itemRegistrar.getRawId(dirt);
+
+// Iterate all registered entries
+for (Item item : itemRegistrar) {
+    System.out.println(itemRegistrar.getId(item));
+}
+
+// Listen for registration of a specific entry
+itemRegistrar.listen(
+    new ResourceLocation("mymod", "example_item"),
+    item -> System.out.println("example_item registered!")
+);
+```
+
+<Tip>
+  Prefer `DeferredRegister` for registering your own content. Use `Registrar` when you need to introspect or react to entries registered by other mods, or when building utilities that work across the full registry.
+</Tip>
+
+## Creating a creative tab
+
+Use `CreativeTabRegistry.create(name, iconSupplier)` to register a creative mode tab that works on both loaders.
+
+```java src/main/java/com/example/registry/ModCreativeTabs.java
+import dev.architectury.registry.CreativeTabRegistry;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.world.item.CreativeModeTab;
+import net.minecraft.world.item.ItemStack;
+
+public class ModCreativeTabs {
+    public static final CreativeModeTab MY_TAB = CreativeTabRegistry.create(
+        new ResourceLocation("mymod", "my_tab"),
+        () -> new ItemStack(ModItems.EXAMPLE_ITEM.get())
+    );
+}
+```
+
+Reference the tab when building `Item.Properties`:
+
+```java
+public static final RegistrySupplier<Item> EXAMPLE_ITEM =
+    ITEMS.register("example_item", () ->
+        new Item(new Item.Properties().tab(ModCreativeTabs.MY_TAB)));
+```
+
+<Note>
+  Create the `CreativeModeTab` constant before calling `DeferredRegister.register()` so the tab reference is available when item suppliers run.
+</Note>

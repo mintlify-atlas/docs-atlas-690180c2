@@ -1,0 +1,441 @@
+---
+title: 'Client events'
+description: 'Client-only events for lifecycle, ticks, player state, chat, GUI rendering, and raw input in the Architectury event system.'
+keywords: ['client', 'ClientLifecycleEvent', 'ClientTickEvent', 'ClientPlayerEvent', 'ClientChatEvent', 'ClientGuiEvent', 'ClientRawInputEvent', 'ClientScreenInputEvent']
+---
+
+<Warning>
+All classes on this page are annotated `@Environment(EnvType.CLIENT)`. Never reference them from common or server-only code — doing so will crash a dedicated server.
+</Warning>
+
+Client events are grouped into seven classes based on their domain. Each event field follows the same pattern as common events: obtain a reference to the static field and call `.register(listener)`.
+
+---
+
+## `ClientLifecycleEvent`
+
+`dev.architectury.event.events.client.ClientLifecycleEvent`
+
+| Event | Listener | Description |
+|---|---|---|
+| `CLIENT_STARTED` | `ClientState` | Invoked when the Minecraft client has been initialised. Equivalent to Fabric's `ClientLifecycleEvents.CLIENT_STARTING`. |
+| `CLIENT_STOPPING` | `ClientState` | Invoked when the client is stopping. Equivalent to Fabric's `ClientLifecycleEvents.CLIENT_STOPPING`. |
+| `CLIENT_LEVEL_LOAD` | `ClientLevelState` | Invoked after a level is loaded on the client side. Equivalent to Forge's `WorldEvent.Load` (client). |
+| `CLIENT_SETUP` | `ClientState` | Invoked once client setup has begun. Equivalent to Forge's `FMLClientSetupEvent`. |
+
+**Listener interfaces:**
+
+```java
+// ClientState (used by CLIENT_STARTED, CLIENT_STOPPING, CLIENT_SETUP)
+void stateChanged(Minecraft instance);
+
+// ClientLevelState (used by CLIENT_LEVEL_LOAD)
+void act(ClientLevel world);
+```
+
+---
+
+## `ClientTickEvent`
+
+`dev.architectury.event.events.client.ClientTickEvent<T>`
+
+| Event | Listener | Tick subject |
+|---|---|---|
+| `CLIENT_PRE` | `ClientTickEvent.Client` | Before each `Minecraft` tick. |
+| `CLIENT_POST` | `ClientTickEvent.Client` | After each `Minecraft` tick. |
+| `CLIENT_LEVEL_PRE` | `ClientTickEvent.ClientLevel` | Before each `ClientLevel` tick. |
+| `CLIENT_LEVEL_POST` | `ClientTickEvent.ClientLevel` | After each `ClientLevel` tick. |
+
+**Listener interface:**
+
+```java
+void tick(T instance);
+```
+
+Where `T` is `Minecraft` for `Client` listeners and `ClientLevel` for `ClientLevel` listeners.
+
+---
+
+## `ClientPlayerEvent`
+
+`dev.architectury.event.events.client.ClientPlayerEvent`
+
+<AccordionGroup>
+  <Accordion title="CLIENT_PLAYER_JOIN — Event&lt;ClientPlayerEvent.ClientPlayerJoin&gt;">
+    Invoked whenever the local player joins a level on the client.
+
+    ```java
+    void join(LocalPlayer player);
+    ```
+
+    | Parameter | Type | Description |
+    |---|---|---|
+    | `player` | `LocalPlayer` | The joining local player. |
+  </Accordion>
+
+  <Accordion title="CLIENT_PLAYER_QUIT — Event&lt;ClientPlayerEvent.ClientPlayerQuit&gt;">
+    Invoked whenever the local player leaves a level and is cleared on the client side.
+
+    ```java
+    void quit(@Nullable LocalPlayer player);
+    ```
+
+    | Parameter | Type | Description |
+    |---|---|---|
+    | `player` | `@Nullable LocalPlayer` | The player leaving, or `null`. |
+  </Accordion>
+
+  <Accordion title="CLIENT_PLAYER_RESPAWN — Event&lt;ClientPlayerEvent.ClientPlayerRespawn&gt;">
+    Invoked when the client receives a respawn packet.
+
+    ```java
+    void respawn(LocalPlayer oldPlayer, LocalPlayer newPlayer);
+    ```
+
+    | Parameter | Type | Description |
+    |---|---|---|
+    | `oldPlayer` | `LocalPlayer` | The player before the respawn. |
+    | `newPlayer` | `LocalPlayer` | The player after the respawn. |
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## `ClientChatEvent`
+
+`dev.architectury.event.events.client.ClientChatEvent`
+
+<AccordionGroup>
+  <Accordion title="SEND — Event&lt;ClientChatEvent.Send&gt;">
+    Invoked before the client sends a chat message. Return an interrupting `EventResult` to prevent sending.
+
+    ```java
+    EventResult send(String message, @Nullable Component component);
+    ```
+
+    | Parameter | Type | Description |
+    |---|---|---|
+    | `message` | `String` | The raw chat message string. |
+    | `component` | `@Nullable Component` | The decorated component, if present. |
+
+    **Returns:** `EventResult` — return `EventResult.interruptTrue()` to cancel sending.
+
+    **Forge equivalent:** `ClientChatEvent`
+  </Accordion>
+
+  <Accordion title="RECEIVED — Event&lt;ClientChatEvent.Received&gt;">
+    Invoked when the client receives an incoming chat message. Return an interrupting `CompoundEventResult` to replace or suppress the message.
+
+    ```java
+    CompoundEventResult<Component> process(ChatType.Bound type, Component message);
+    ```
+
+    | Parameter | Type | Description |
+    |---|---|---|
+    | `type` | `ChatType.Bound` | Where the message originated. |
+    | `message` | `Component` | The received chat component. |
+
+    **Returns:** `CompoundEventResult<Component>` — return `CompoundEventResult.interruptTrue(replacement)` to replace the message.
+
+    **Forge equivalent:** `ClientChatReceivedEvent`
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## `ClientGuiEvent`
+
+`dev.architectury.event.events.client.ClientGuiEvent`
+
+<AccordionGroup>
+  <Accordion title="RENDER_HUD — Event&lt;ClientGuiEvent.RenderHud&gt;">
+    Invoked after the in-game HUD has been rendered.
+
+    ```java
+    void renderHud(PoseStack matrices, float tickDelta);
+    ```
+
+    **Forge equivalent:** `RenderGameOverlayEvent.Post` (`ElementType#ALL`)
+    **Fabric equivalent:** `HudRenderCallback`
+  </Accordion>
+
+  <Accordion title="DEBUG_TEXT_LEFT / DEBUG_TEXT_RIGHT — Event&lt;ClientGuiEvent.DebugText&gt;">
+    Invoked when debug text strings are gathered for the F3 screen. `DEBUG_TEXT_LEFT` targets the left column, `DEBUG_TEXT_RIGHT` the right.
+
+    ```java
+    void gatherText(List<String> strings);
+    ```
+
+    Mutate `strings` to add or remove debug lines.
+
+    **Forge equivalent:** `RenderGameOverlayEvent.Text` (when `renderDebug` is enabled)
+  </Accordion>
+
+  <Accordion title="INIT_PRE — Event&lt;ClientGuiEvent.ScreenInitPre&gt;">
+    Invoked when a screen is being initialised, after the previous widgets have been cleared. Return an interrupting result to skip vanilla initialisation.
+
+    ```java
+    EventResult init(Screen screen, ScreenAccess access);
+    ```
+
+    **Forge equivalent:** `GuiScreenEvent.InitGuiEvent.Pre`
+  </Accordion>
+
+  <Accordion title="INIT_POST — Event&lt;ClientGuiEvent.ScreenInitPost&gt;">
+    Invoked after a screen has been fully initialised.
+
+    ```java
+    void init(Screen screen, ScreenAccess access);
+    ```
+
+    **Forge equivalent:** `GuiScreenEvent.InitGuiEvent.Post`
+  </Accordion>
+
+  <Accordion title="RENDER_PRE — Event&lt;ClientGuiEvent.ScreenRenderPre&gt;">
+    Invoked before any screen is rendered. Return an interrupting result to skip vanilla rendering.
+
+    ```java
+    EventResult render(Screen screen, PoseStack matrices, int mouseX, int mouseY, float delta);
+    ```
+
+    **Forge equivalent:** `GuiScreenEvent.DrawScreenEvent.Pre`
+  </Accordion>
+
+  <Accordion title="RENDER_POST — Event&lt;ClientGuiEvent.ScreenRenderPost&gt;">
+    Invoked after a screen has finished its vanilla render pass.
+
+    ```java
+    void render(Screen screen, PoseStack matrices, int mouseX, int mouseY, float delta);
+    ```
+
+    **Forge equivalent:** `GuiScreenEvent.DrawScreenEvent.Post`
+  </Accordion>
+
+  <Accordion title="RENDER_CONTAINER_BACKGROUND — Event&lt;ClientGuiEvent.ContainerScreenRenderBackground&gt;">
+    Invoked after a container screen's background is rendered.
+
+    ```java
+    void render(AbstractContainerScreen<?> screen, PoseStack matrices, int mouseX, int mouseY, float delta);
+    ```
+
+    **Forge equivalent:** `ContainerScreenEvent.DrawBackground`
+  </Accordion>
+
+  <Accordion title="RENDER_CONTAINER_FOREGROUND — Event&lt;ClientGuiEvent.ContainerScreenRenderForeground&gt;">
+    Invoked after the container screen's foreground is rendered but before floating widgets (e.g., tooltips) are drawn.
+
+    ```java
+    void render(AbstractContainerScreen<?> screen, PoseStack matrices, int mouseX, int mouseY, float delta);
+    ```
+
+    **Forge equivalent:** `ContainerScreenEvent.DrawForeground`
+  </Accordion>
+
+  <Accordion title="SET_SCREEN — Event&lt;ClientGuiEvent.SetScreen&gt;">
+    Invoked before a new screen is opened. Return a `CompoundEventResult` to replace the screen.
+
+    ```java
+    CompoundEventResult<Screen> modifyScreen(Screen screen);
+    ```
+
+    | Parameter | Type | Description |
+    |---|---|---|
+    | `screen` | `Screen` | The screen about to be opened. |
+
+    **Returns:** `CompoundEventResult<Screen>` — return `CompoundEventResult.interruptTrue(replacement)` to open a different screen instead.
+
+    **Forge equivalent:** `GuiOpenEvent`
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## `ClientRawInputEvent`
+
+`dev.architectury.event.events.client.ClientRawInputEvent`
+
+These events fire for raw OS-level input, independent of any open screen.
+
+<AccordionGroup>
+  <Accordion title="MOUSE_SCROLLED — Event&lt;ClientRawInputEvent.MouseScrolled&gt;">
+    Invoked whenever the mouse scroll wheel is used.
+
+    ```java
+    EventResult mouseScrolled(Minecraft client, double amount);
+    ```
+
+    | Parameter | Type | Description |
+    |---|---|---|
+    | `client` | `Minecraft` | The Minecraft instance. |
+    | `amount` | `double` | The scroll delta. |
+
+    **Returns:** `EventResult`
+
+    **Forge equivalent:** `InputEvent.MouseScrollEvent`
+  </Accordion>
+
+  <Accordion title="MOUSE_CLICKED_PRE / MOUSE_CLICKED_POST — Event&lt;ClientRawInputEvent.MouseClicked&gt;">
+    Invoked before/after a mouse button press is processed by the game.
+
+    ```java
+    EventResult mouseClicked(Minecraft client, int button, int action, int mods);
+    ```
+
+    | Parameter | Type | Description |
+    |---|---|---|
+    | `client` | `Minecraft` | The Minecraft instance. |
+    | `button` | `int` | The GLFW mouse button code. |
+    | `action` | `int` | The GLFW action (press, release, repeat). |
+    | `mods` | `int` | Modifier key flags. |
+
+    **Returns:** `EventResult`
+  </Accordion>
+
+  <Accordion title="KEY_PRESSED — Event&lt;ClientRawInputEvent.KeyPressed&gt;">
+    Invoked whenever a key input is performed (outside of a screen).
+
+    ```java
+    EventResult keyPressed(Minecraft client, int keyCode, int scanCode, int action, int modifiers);
+    ```
+
+    | Parameter | Type | Description |
+    |---|---|---|
+    | `client` | `Minecraft` | The Minecraft instance. |
+    | `keyCode` | `int` | The GLFW key code. |
+    | `scanCode` | `int` | The raw keyboard scan code. |
+    | `action` | `int` | The GLFW action. |
+    | `modifiers` | `int` | Modifier key flags. |
+
+    **Returns:** `EventResult`
+
+    **Forge equivalent:** `InputEvent.KeyInputEvent`
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## `ClientScreenInputEvent`
+
+`dev.architectury.event.events.client.ClientScreenInputEvent`
+
+All events here come in `_PRE` and `_POST` pairs, fired before and after the screen handles the input respectively.
+
+<AccordionGroup>
+  <Accordion title="MOUSE_SCROLLED_PRE / MOUSE_SCROLLED_POST — Event&lt;ClientScreenInputEvent.MouseScrolled&gt;">
+    Invoked when the scroll wheel is moved while a screen is open.
+
+    ```java
+    EventResult mouseScrolled(Minecraft client, Screen screen, double mouseX, double mouseY, double amount);
+    ```
+
+    **Forge equivalent:** `GuiScreenEvent.MouseScrollEvent`
+  </Accordion>
+
+  <Accordion title="MOUSE_CLICKED_PRE / MOUSE_CLICKED_POST — Event&lt;ClientScreenInputEvent.MouseClicked&gt;">
+    Invoked when a mouse button is clicked inside a screen.
+
+    ```java
+    EventResult mouseClicked(Minecraft client, Screen screen, double mouseX, double mouseY, int button);
+    ```
+
+    **Forge equivalent:** `GuiScreenEvent.MouseClickedEvent`
+  </Accordion>
+
+  <Accordion title="MOUSE_RELEASED_PRE / MOUSE_RELEASED_POST — Event&lt;ClientScreenInputEvent.MouseReleased&gt;">
+    Invoked when a mouse button is released inside a screen.
+
+    ```java
+    EventResult mouseReleased(Minecraft client, Screen screen, double mouseX, double mouseY, int button);
+    ```
+
+    **Forge equivalent:** `GuiScreenEvent.MouseReleasedEvent`
+  </Accordion>
+
+  <Accordion title="MOUSE_DRAGGED_PRE / MOUSE_DRAGGED_POST — Event&lt;ClientScreenInputEvent.MouseDragged&gt;">
+    Invoked when the mouse is dragged across a screen.
+
+    ```java
+    EventResult mouseDragged(
+        Minecraft client, Screen screen,
+        double mouseX1, double mouseY1,
+        int button,
+        double mouseX2, double mouseY2
+    );
+    ```
+
+    **Forge equivalent:** `GuiScreenEvent.MouseDragEvent`
+  </Accordion>
+
+  <Accordion title="CHAR_TYPED_PRE / CHAR_TYPED_POST — Event&lt;ClientScreenInputEvent.KeyTyped&gt;">
+    Invoked when a character is typed within a screen.
+
+    ```java
+    EventResult charTyped(Minecraft client, Screen screen, char character, int keyCode);
+    ```
+
+    **Forge equivalent:** `GuiScreenEvent.KeyboardCharTypedEvent`
+  </Accordion>
+
+  <Accordion title="KEY_PRESSED_PRE / KEY_PRESSED_POST — Event&lt;ClientScreenInputEvent.KeyPressed&gt;">
+    Invoked when a key is pressed inside a screen.
+
+    ```java
+    EventResult keyPressed(Minecraft client, Screen screen, int keyCode, int scanCode, int modifiers);
+    ```
+
+    **Forge equivalent:** `GuiScreenEvent.KeyboardKeyPressedEvent`
+  </Accordion>
+
+  <Accordion title="KEY_RELEASED_PRE / KEY_RELEASED_POST — Event&lt;ClientScreenInputEvent.KeyReleased&gt;">
+    Invoked when a held key is released inside a screen.
+
+    ```java
+    EventResult keyReleased(Minecraft client, Screen screen, int keyCode, int scanCode, int modifiers);
+    ```
+
+    **Forge equivalent:** `GuiScreenEvent.KeyboardKeyReleasedEvent`
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## Usage examples
+
+### Running logic every client tick
+
+```java
+// In your client-only initialiser
+ClientTickEvent.CLIENT_POST.register(minecraft -> {
+    if (minecraft.player != null) {
+        // Runs once per game tick on the client
+        MyClientMod.tick(minecraft.player);
+    }
+});
+```
+
+### Drawing custom HUD elements
+
+```java
+ClientGuiEvent.RENDER_HUD.register((matrices, tickDelta) -> {
+    Minecraft mc = Minecraft.getInstance();
+    if (mc.player == null) return;
+
+    mc.font.draw(
+        matrices,
+        "Custom HUD",
+        4, 4, 0xFFFFFF
+    );
+});
+```
+
+### Intercepting a client chat send
+
+```java
+ClientChatEvent.SEND.register((message, component) -> {
+    if (message.startsWith("!secret")) {
+        // Silently drop the message
+        return EventResult.interruptTrue();
+    }
+    return EventResult.pass();
+});
+```

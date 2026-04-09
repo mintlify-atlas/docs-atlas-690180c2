@@ -1,0 +1,261 @@
+---
+title: "DeferredRegister"
+description: "Collect registry entries at class-load time and register them all at the correct moment during mod initialisation."
+keywords: ["DeferredRegister", "registry", "RegistrySupplier", "Fabric", "Forge", "registration"]
+---
+
+`DeferredRegister<T>` lets you declare registry entries as static fields at class-load time and then register them all in one call during mod initialisation. It handles the platform timing differences (Fabric vs. Forge) internally so you do not have to.
+
+```java
+public class MyBlocks {
+    private static final DeferredRegister<Block> BLOCKS =
+        DeferredRegister.create("mymod", Registry.BLOCK_REGISTRY);
+
+    public static final RegistrySupplier<Block> STONE_PLATFORM =
+        BLOCKS.register("stone_platform", StonePlatformBlock::new);
+
+    public static void init() {
+        BLOCKS.register(); // call once during mod init
+    }
+}
+```
+
+## Static factory
+
+### `DeferredRegister.create(String modId, ResourceKey<Registry<T>> key)`
+
+Creates a new `DeferredRegister` bound to the given mod ID and registry.
+
+<ParamField path="modId" type="String" required>
+  Your mod's ID. Used as the namespace when calling `register(String, Supplier)`.
+</ParamField>
+
+<ParamField path="key" type="ResourceKey<Registry<T>>" required>
+  The registry to register entries into (e.g. `Registry.BLOCK_REGISTRY`).
+</ParamField>
+
+```java
+DeferredRegister<Block> BLOCKS = DeferredRegister.create("mymod", Registry.BLOCK_REGISTRY);
+DeferredRegister<Item>  ITEMS  = DeferredRegister.create("mymod", Registry.ITEM_REGISTRY);
+```
+
+---
+
+## Registering entries
+
+### `register(String id, Supplier<? extends R> supplier)`
+
+Registers an entry using your mod's namespace. The `id` must be the **path** only — the mod ID is prepended automatically.
+
+Returns a `RegistrySupplier<R>` that resolves once the entry is registered.
+
+<ParamField path="id" type="String" required>
+  The path portion of the registry name (e.g. `"stone_platform"`).
+</ParamField>
+
+<ParamField path="supplier" type="Supplier<? extends R>" required>
+  A factory that creates the registry entry.
+</ParamField>
+
+```java
+public static final RegistrySupplier<Block> MY_BLOCK =
+    BLOCKS.register("my_block", MyBlock::new);
+```
+
+---
+
+### `register(ResourceLocation id, Supplier<? extends R> supplier)`
+
+Same as above, but accepts a fully-qualified `ResourceLocation` as the ID. Use this when the entry belongs to a different namespace.
+
+<ParamField path="id" type="ResourceLocation" required>
+  The full registry name including namespace.
+</ParamField>
+
+<ParamField path="supplier" type="Supplier<? extends R>" required>
+  A factory that creates the registry entry.
+</ParamField>
+
+```java
+public static final RegistrySupplier<Block> VANILLA_COMPAT_BLOCK =
+    BLOCKS.register(new ResourceLocation("minecraft", "compat_block"), CompatBlock::new);
+```
+
+---
+
+## Activating the register
+
+### `register()`
+
+Submits all queued entries to the underlying `Registrar`. You must call this **exactly once** during mod initialisation.
+
+<Warning>
+  Calling `register()` more than once throws `IllegalStateException: Cannot register a deferred register twice!`. Ensure this method is only invoked once per `DeferredRegister` instance.
+</Warning>
+
+```java
+// In your mod's main initialiser class:
+public class MyMod implements ModInitializer {
+    @Override
+    public void onInitialize() {
+        MyBlocks.BLOCKS.register();
+        MyItems.ITEMS.register();
+    }
+}
+```
+
+Entries added after `register()` is called are registered immediately rather than being queued.
+
+---
+
+## Accessing the registrar and registries
+
+### `getRegistrar()`
+
+Returns the underlying `Registrar<T>` for the registry this `DeferredRegister` targets.
+
+```java
+Registrar<Block> registrar = MY_DEFERRED_REGISTER.getRegistrar();
+```
+
+### `getRegistries()`
+
+Returns the `Registries` instance that backs this `DeferredRegister`.
+
+```java
+Registries registries = MY_DEFERRED_REGISTER.getRegistries();
+```
+
+---
+
+## Iterating entries
+
+`DeferredRegister<T>` implements `Iterable<RegistrySupplier<T>>`, so you can iterate all registered entries with a for-each loop or a stream.
+
+```java
+for (RegistrySupplier<Block> entry : BLOCKS) {
+    System.out.println(entry.getId());
+}
+```
+
+---
+
+## `RegistrySupplier<T>`
+
+Every call to `register(...)` returns a `RegistrySupplier<T>`. It is a lazy reference to the registered object and is safe to store as a static field. The underlying object is not available until after `register()` is called and the platform has completed registration.
+
+### Methods
+
+<ResponseField name="get()" type="T">
+  Returns the registered object. Throws `NullPointerException` if called before the entry is registered (i.e. before `isPresent()` returns `true`).
+</ResponseField>
+
+<ResponseField name="getId()" type="ResourceLocation">
+  Returns the full registry name of this entry (e.g. `mymod:my_block`).
+</ResponseField>
+
+<ResponseField name="getRegistryId()" type="ResourceLocation">
+  Returns the identifier of the registry this entry belongs to (e.g. `minecraft:block`).
+</ResponseField>
+
+<ResponseField name="getRegistryKey()" type="ResourceKey<Registry<T>>">
+  Returns the `ResourceKey` for the registry this entry belongs to.
+</ResponseField>
+
+<ResponseField name="isPresent()" type="boolean">
+  Returns `true` when the entry has been registered and the object is available.
+</ResponseField>
+
+<ResponseField name="getOrNull()" type="T | null">
+  Returns the object if present, otherwise `null`.
+</ResponseField>
+
+<ResponseField name="toOptional()" type="Optional<T>">
+  Wraps `getOrNull()` in an `Optional`.
+</ResponseField>
+
+<ResponseField name="ifPresent(Consumer<T>)" type="void">
+  Calls the given action with the registered object if it is present.
+</ResponseField>
+
+<ResponseField name="ifPresentOrElse(Consumer<T>, Runnable)" type="void">
+  Calls the action with the object if present, or the empty action if not present.
+</ResponseField>
+
+<ResponseField name="stream()" type="Stream<T>">
+  Returns a `Stream` containing the object if present, or an empty `Stream` otherwise.
+</ResponseField>
+
+<ResponseField name="orElse(T other)" type="T">
+  Returns the registered object if present, or `other` if not.
+</ResponseField>
+
+<ResponseField name="orElseGet(Supplier<? extends T>)" type="T">
+  Returns the registered object if present, or the value from `supplier` if not.
+</ResponseField>
+
+<ResponseField name="listen(Consumer<T>)" type="void">
+  Registers a callback to be called when the entry becomes available. Evaluates immediately if the entry is already registered. Delegates to `Registrar.listen`.
+</ResponseField>
+
+<ResponseField name="getRegistrar()" type="Registrar<T>">
+  Returns the `Registrar` that owns this entry.
+</ResponseField>
+
+<ResponseField name="getRegistries()" type="Registries">
+  Returns the `Registries` instance associated with this entry.
+</ResponseField>
+
+---
+
+## Complete example
+
+The following example registers a `Block` and a matching `BlockItem`.
+
+```java
+import dev.architectury.registry.registries.DeferredRegister;
+import dev.architectury.registry.registries.RegistrySupplier;
+import net.minecraft.core.Registry;
+import net.minecraft.world.item.BlockItem;
+import net.minecraft.world.item.Item;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.state.BlockBehaviour;
+import net.minecraft.world.level.material.Material;
+
+public class MyBlocks {
+    public static final DeferredRegister<Block> BLOCKS =
+        DeferredRegister.create("mymod", Registry.BLOCK_REGISTRY);
+
+    public static final DeferredRegister<Item> ITEMS =
+        DeferredRegister.create("mymod", Registry.ITEM_REGISTRY);
+
+    // Register a block
+    public static final RegistrySupplier<Block> COPPER_CRATE =
+        BLOCKS.register("copper_crate",
+            () -> new Block(BlockBehaviour.Properties.of(Material.METAL)));
+
+    // Register a BlockItem for it
+    public static final RegistrySupplier<Item> COPPER_CRATE_ITEM =
+        ITEMS.register("copper_crate",
+            () -> new BlockItem(COPPER_CRATE.get(), new Item.Properties()));
+
+    public static void init() {
+        BLOCKS.register();
+        ITEMS.register();
+    }
+}
+```
+
+```java
+// In your mod initialiser:
+public class MyMod implements ModInitializer {
+    @Override
+    public void onInitialize() {
+        MyBlocks.init();
+    }
+}
+```
+
+<Note>
+  `COPPER_CRATE.get()` in the `BlockItem` supplier is safe because suppliers are evaluated lazily — by the time this supplier runs, `COPPER_CRATE` is guaranteed to be present.
+</Note>

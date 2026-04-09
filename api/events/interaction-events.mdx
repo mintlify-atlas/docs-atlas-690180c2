@@ -1,0 +1,442 @@
+---
+title: 'Interaction events'
+description: 'Block, item, and entity interaction events, plus block lifecycle and explosion events for the Architectury event system.'
+keywords: ['interaction', 'InteractionEvent', 'BlockEvent', 'EntityEvent', 'ExplosionEvent', 'click', 'block', 'entity']
+---
+
+This page covers player–world interactions (`InteractionEvent`), block lifecycle events (`BlockEvent`), entity events (`EntityEvent`), and explosion events (`ExplosionEvent`).
+
+---
+
+## `InteractionEvent`
+
+`dev.architectury.event.events.common.InteractionEvent`
+
+<AccordionGroup>
+  <Accordion title="LEFT_CLICK_BLOCK — Event&lt;InteractionEvent.LeftClickBlock&gt;">
+    Invoked whenever a player left-clicks a block.
+
+    **Listener interface:** `InteractionEvent.LeftClickBlock`
+
+    ```java
+    EventResult click(Player player, InteractionHand hand, BlockPos pos, Direction face);
+    ```
+
+    | Parameter | Type | Description |
+    |---|---|---|
+    | `player` | `Player` | The player clicking the block. Use `player.getCommandSenderWorld()` to get the level. |
+    | `hand` | `InteractionHand` | The hand used. |
+    | `pos` | `BlockPos` | The position of the block. |
+    | `face` | `Direction` | The face of the block that was clicked. |
+
+    **Returns:** `EventResult` — return `EventResult.interruptFalse()` to cancel.
+
+    **Forge equivalent:** `PlayerInteractEvent.LeftClickBlock`
+    **Fabric equivalent:** `AttackBlockCallback`
+  </Accordion>
+
+  <Accordion title="RIGHT_CLICK_BLOCK — Event&lt;InteractionEvent.RightClickBlock&gt;">
+    Invoked whenever a player right-clicks a block.
+
+    **Listener interface:** `InteractionEvent.RightClickBlock`
+
+    ```java
+    EventResult click(Player player, InteractionHand hand, BlockPos pos, Direction face);
+    ```
+
+    | Parameter | Type | Description |
+    |---|---|---|
+    | `player` | `Player` | The player clicking the block. |
+    | `hand` | `InteractionHand` | The hand used. |
+    | `pos` | `BlockPos` | The position of the block. |
+    | `face` | `Direction` | The face of the block that was clicked. |
+
+    **Returns:** `EventResult` — return `EventResult.interruptFalse()` to cancel.
+
+    **Forge equivalent:** `PlayerInteractEvent.RightClickBlock`
+    **Fabric equivalent:** `UseBlockCallback`
+  </Accordion>
+
+  <Accordion title="RIGHT_CLICK_ITEM — Event&lt;InteractionEvent.RightClickItem&gt;">
+    Invoked whenever a player uses an item (right-click without targeting a block or entity).
+
+    **Listener interface:** `InteractionEvent.RightClickItem`
+
+    ```java
+    CompoundEventResult<ItemStack> click(Player player, InteractionHand hand);
+    ```
+
+    | Parameter | Type | Description |
+    |---|---|---|
+    | `player` | `Player` | The player using the item. |
+    | `hand` | `InteractionHand` | The hand used. |
+
+    **Returns:** `CompoundEventResult<ItemStack>` — return `CompoundEventResult.interruptTrue(stack)` to override the result item.
+
+    **Forge equivalent:** `PlayerInteractEvent.RightClickItem`
+    **Fabric equivalent:** `UseItemCallback`
+  </Accordion>
+
+  <Accordion title="CLIENT_LEFT_CLICK_AIR — Event&lt;InteractionEvent.ClientLeftClickAir&gt;">
+    Invoked whenever a player left-clicks air. Fires only on the client.
+
+    **Listener interface:** `InteractionEvent.ClientLeftClickAir`
+
+    ```java
+    void click(Player player, InteractionHand hand);
+    ```
+
+    | Parameter | Type | Description |
+    |---|---|---|
+    | `player` | `Player` | The local player. Always a `LocalPlayer` instance. |
+    | `hand` | `InteractionHand` | The hand used. |
+
+    **Forge equivalent:** `PlayerInteractEvent.LeftClickEmpty`
+
+    <Warning>
+      This event only fires on the client. Do not use it to drive server-side logic.
+    </Warning>
+  </Accordion>
+
+  <Accordion title="CLIENT_RIGHT_CLICK_AIR — Event&lt;InteractionEvent.ClientRightClickAir&gt;">
+    Invoked whenever a player right-clicks air. Fires only on the client.
+
+    **Listener interface:** `InteractionEvent.ClientRightClickAir`
+
+    ```java
+    void click(Player player, InteractionHand hand);
+    ```
+
+    | Parameter | Type | Description |
+    |---|---|---|
+    | `player` | `Player` | The local player. Always a `LocalPlayer` instance. |
+    | `hand` | `InteractionHand` | The hand used. |
+
+    **Forge equivalent:** `PlayerInteractEvent.RightClickEmpty`
+
+    <Warning>
+      This event only fires on the client. Do not use it to drive server-side logic.
+    </Warning>
+  </Accordion>
+
+  <Accordion title="INTERACT_ENTITY — Event&lt;InteractionEvent.InteractEntity&gt;">
+    Invoked whenever a player right-clicks an entity.
+
+    **Listener interface:** `InteractionEvent.InteractEntity`
+
+    ```java
+    EventResult interact(Player player, Entity entity, InteractionHand hand);
+    ```
+
+    | Parameter | Type | Description |
+    |---|---|---|
+    | `player` | `Player` | The player clicking the entity. |
+    | `entity` | `Entity` | The entity being interacted with. |
+    | `hand` | `InteractionHand` | The hand used. |
+
+    **Returns:** `EventResult` — return `EventResult.interruptFalse()` to cancel the interaction.
+
+    **Forge equivalent:** `PlayerInteractEvent.EntityInteract`
+  </Accordion>
+
+  <Accordion title="FARMLAND_TRAMPLE — Event&lt;InteractionEvent.FarmlandTrample&gt;">
+    Invoked when an entity attempts to trample farmland.
+
+    **Listener interface:** `InteractionEvent.FarmlandTrample`
+
+    ```java
+    EventResult trample(Level world, BlockPos pos, BlockState state, float distance, Entity entity);
+    ```
+
+    | Parameter | Type | Description |
+    |---|---|---|
+    | `world` | `Level` | The level containing the farmland block. |
+    | `pos` | `BlockPos` | The position of the farmland block. |
+    | `state` | `BlockState` | The block state of the farmland. |
+    | `distance` | `float` | The fall distance of the entity. |
+    | `entity` | `Entity` | The entity trampling the farmland. |
+
+    **Returns:** `EventResult` — return `EventResult.interruptFalse()` to prevent trampling.
+
+    **Forge equivalent:** `BlockEvent.FarmlandTrampleEvent`
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## `BlockEvent`
+
+`dev.architectury.event.events.common.BlockEvent`
+
+<AccordionGroup>
+  <Accordion title="BREAK — Event&lt;BlockEvent.Break&gt;">
+    Invoked when a block is destroyed by a player.
+
+    **Listener interface:** `BlockEvent.Break`
+
+    ```java
+    EventResult breakBlock(Level level, BlockPos pos, BlockState state, ServerPlayer player, @Nullable IntValue xp);
+    ```
+
+    | Parameter | Type | Description |
+    |---|---|---|
+    | `level` | `Level` | The level the block is in. |
+    | `pos` | `BlockPos` | The position of the block. |
+    | `state` | `BlockState` | The current block state. |
+    | `player` | `ServerPlayer` | The player breaking the block. |
+    | `xp` | `@Nullable IntValue` | The XP to drop. Always `null` on Fabric. |
+
+    **Returns:** `EventResult` — return `EventResult.interruptFalse()` to cancel breaking.
+  </Accordion>
+
+  <Accordion title="PLACE — Event&lt;BlockEvent.Place&gt;">
+    Invoked when a block is placed.
+
+    **Listener interface:** `BlockEvent.Place`
+
+    ```java
+    EventResult placeBlock(Level level, BlockPos pos, BlockState state, @Nullable Entity placer);
+    ```
+
+    | Parameter | Type | Description |
+    |---|---|---|
+    | `level` | `Level` | The level the block is in. |
+    | `pos` | `BlockPos` | The position where the block is being placed. |
+    | `state` | `BlockState` | The future block state. |
+    | `placer` | `@Nullable Entity` | The entity placing the block, or `null` (e.g., a dispenser). |
+
+    **Returns:** `EventResult` — return `EventResult.interruptFalse()` to cancel placement.
+  </Accordion>
+
+  <Accordion title="FALLING_LAND — Event&lt;BlockEvent.FallingLand&gt;">
+    Invoked when a falling block entity is about to land.
+
+    **Listener interface:** `BlockEvent.FallingLand`
+
+    ```java
+    void onLand(Level level, BlockPos pos, BlockState fallState, BlockState landOn, FallingBlockEntity entity);
+    ```
+
+    | Parameter | Type | Description |
+    |---|---|---|
+    | `level` | `Level` | The level the block is landing in. |
+    | `pos` | `BlockPos` | The landing position. |
+    | `fallState` | `BlockState` | The block state of the falling block. |
+    | `landOn` | `BlockState` | The block state of the block being landed on. |
+    | `entity` | `FallingBlockEntity` | The falling block entity. |
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## `EntityEvent`
+
+`dev.architectury.event.events.common.EntityEvent`
+
+<AccordionGroup>
+  <Accordion title="LIVING_DEATH — Event&lt;EntityEvent.LivingDeath&gt;">
+    Invoked before a living entity dies.
+
+    **Listener interface:** `EntityEvent.LivingDeath`
+
+    ```java
+    EventResult die(LivingEntity entity, DamageSource source);
+    ```
+
+    | Parameter | Type | Description |
+    |---|---|---|
+    | `entity` | `LivingEntity` | The entity about to die. |
+    | `source` | `DamageSource` | The damage source that caused the death. |
+
+    **Returns:** `EventResult` — return `EventResult.interruptFalse()` to cancel the death.
+
+    **Forge equivalent:** `LivingDeathEvent`
+  </Accordion>
+
+  <Accordion title="LIVING_HURT — Event&lt;EntityEvent.LivingHurt&gt;">
+    Invoked before a living entity is hurt by a damage source. You cannot modify the damage amount through this event.
+
+    **Listener interface:** `EntityEvent.LivingHurt`
+
+    ```java
+    EventResult hurt(LivingEntity entity, DamageSource source, float amount);
+    ```
+
+    | Parameter | Type | Description |
+    |---|---|---|
+    | `entity` | `LivingEntity` | The entity being attacked. |
+    | `source` | `DamageSource` | The reason for the damage. |
+    | `amount` | `float` | The amount of damage. |
+
+    **Returns:** `EventResult` — return `EventResult.interruptFalse()` to cancel the damage.
+
+    **Forge equivalent:** `LivingAttackEvent`
+  </Accordion>
+
+  <Accordion title="LIVING_CHECK_SPAWN — Event&lt;EntityEvent.LivingCheckSpawn&gt;">
+    Invoked before a living entity is spawned via a spawner or during world generation. Does not cover all spawn sources.
+
+    **Listener interface:** `EntityEvent.LivingCheckSpawn`
+
+    ```java
+    EventResult canSpawn(
+        LivingEntity entity,
+        LevelAccessor world,
+        double x, double y, double z,
+        MobSpawnType type,
+        @Nullable BaseSpawner spawner
+    );
+    ```
+
+    | Parameter | Type | Description |
+    |---|---|---|
+    | `entity` | `LivingEntity` | The entity about to spawn. |
+    | `world` | `LevelAccessor` | The level the entity wants to spawn in. |
+    | `x`, `y`, `z` | `double` | The spawn coordinates. |
+    | `type` | `MobSpawnType` | The source of the spawn. |
+    | `spawner` | `@Nullable BaseSpawner` | The spawner, if applicable. |
+
+    **Returns:** `EventResult` — return an interrupting result to override the default spawn check.
+
+    **Forge equivalent:** `LivingSpawnEvent.CheckSpawn`
+  </Accordion>
+
+  <Accordion title="ADD — Event&lt;EntityEvent.Add&gt;">
+    Invoked when an entity is about to be added to the world.
+
+    **Listener interface:** `EntityEvent.Add`
+
+    ```java
+    EventResult add(Entity entity, Level world);
+    ```
+
+    | Parameter | Type | Description |
+    |---|---|---|
+    | `entity` | `Entity` | The entity being added. |
+    | `world` | `Level` | The level the entity is being added to. |
+
+    **Returns:** `EventResult` — return `EventResult.interruptFalse()` to cancel the addition.
+
+    **Forge equivalent:** `EntityJoinWorldEvent`
+  </Accordion>
+
+  <Accordion title="ENTER_SECTION — Event&lt;EntityEvent.EnterSection&gt;">
+    Invoked whenever an entity moves into a new chunk section.
+
+    **Listener interface:** `EntityEvent.EnterSection`
+
+    ```java
+    void enterSection(Entity entity, int sectionX, int sectionY, int sectionZ, int prevX, int prevY, int prevZ);
+    ```
+
+    | Parameter | Type | Description |
+    |---|---|---|
+    | `entity` | `Entity` | The entity entering a new section. |
+    | `sectionX/Y/Z` | `int` | The new section coordinates. |
+    | `prevX/Y/Z` | `int` | The previous section coordinates. |
+
+    **Forge equivalent:** `EnteringChunk`
+  </Accordion>
+
+  <Accordion title="ANIMAL_TAME — Event&lt;EntityEvent.AnimalTame&gt;">
+    Invoked before a tameable animal is tamed. Only works with vanilla mobs; custom entities must call this event themselves or implement their own.
+
+    **Listener interface:** `EntityEvent.AnimalTame`
+
+    ```java
+    EventResult tame(Animal animal, Player player);
+    ```
+
+    | Parameter | Type | Description |
+    |---|---|---|
+    | `animal` | `Animal` | The animal being tamed. |
+    | `player` | `Player` | The player doing the taming. |
+
+    **Returns:** `EventResult` — return `EventResult.interruptFalse()` to prevent taming.
+
+    **Forge equivalent:** `AnimalTameEvent`
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## `ExplosionEvent`
+
+`dev.architectury.event.events.common.ExplosionEvent`
+
+<AccordionGroup>
+  <Accordion title="PRE — Event&lt;ExplosionEvent.Pre&gt;">
+    Invoked before an explosion happens. Return an interrupting result to cancel it.
+
+    **Listener interface:** `ExplosionEvent.Pre`
+
+    ```java
+    EventResult explode(Level level, Explosion explosion);
+    ```
+
+    | Parameter | Type | Description |
+    |---|---|---|
+    | `level` | `Level` | The level the explosion is in. |
+    | `explosion` | `Explosion` | The explosion about to happen. |
+
+    **Returns:** `EventResult` — return `EventResult.interruptFalse()` to cancel the explosion.
+
+    **Forge equivalent:** `ExplosionEvent.Start`
+  </Accordion>
+
+  <Accordion title="DETONATE — Event&lt;ExplosionEvent.Detonate&gt;">
+    Invoked when an explosion is detonating. You can inspect or modify `affectedEntities`.
+
+    **Listener interface:** `ExplosionEvent.Detonate`
+
+    ```java
+    void explode(Level level, Explosion explosion, List<Entity> affectedEntities);
+    ```
+
+    | Parameter | Type | Description |
+    |---|---|---|
+    | `level` | `Level` | The level the explosion is in. |
+    | `explosion` | `Explosion` | The explosion happening. |
+    | `affectedEntities` | `List<Entity>` | The mutable list of entities affected by the explosion. |
+
+    **Forge equivalent:** `ExplosionEvent.Detonate`
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## Usage examples
+
+### Cancelling a right-click on a block
+
+```java
+InteractionEvent.RIGHT_CLICK_BLOCK.register((player, hand, pos, face) -> {
+    // Prevent right-clicking the block at the spawn position
+    if (pos.equals(SPAWN_BLOCK_POS)) {
+        player.sendSystemMessage(Component.literal("That block is protected!"));
+        return EventResult.interruptFalse();
+    }
+    return EventResult.pass();
+});
+```
+
+### Preventing animals from being tamed
+
+```java
+EntityEvent.ANIMAL_TAME.register((animal, player) -> {
+    if (animal instanceof Wolf) {
+        // Wolves cannot be tamed in this world
+        return EventResult.interruptFalse();
+    }
+    return EventResult.pass();
+});
+```
+
+### Removing specific entities from an explosion's affected list
+
+```java
+ExplosionEvent.DETONATE.register((level, explosion, affectedEntities) -> {
+    // Protect all players from explosion knockback/damage list
+    affectedEntities.removeIf(entity -> entity instanceof Player);
+});
+```

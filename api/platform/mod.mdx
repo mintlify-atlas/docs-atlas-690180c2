@@ -1,0 +1,247 @@
+---
+title: "Mod"
+description: "Interface representing a loaded mod's metadata, file paths, and configuration screen registration."
+---
+
+`Mod` is an interface in `dev.architectury.platform` that exposes metadata and file system information for a single loaded mod. You obtain a `Mod` instance through [`Platform.getMod()`](/api/platform/platform#getmod-string-id) or [`Platform.getOptionalMod()`](/api/platform/platform#getoptionalmod-string-id).
+
+```java
+// Retrieve a mod container (throws if not loaded)
+Mod mod = Platform.getMod("my-mod");
+
+// Safely retrieve a mod container
+Optional<Mod> optionalMod = Platform.getOptionalMod("my-optional-dep");
+```
+
+---
+
+## Identity
+
+### `getModId()`
+
+```java
+String getModId()
+```
+
+Returns the unique mod ID string.
+
+**Returns:** `String` — for example, `"architectury"`
+
+---
+
+### `getVersion()`
+
+```java
+String getVersion()
+```
+
+Returns the mod's version string as declared in its mod metadata file.
+
+**Returns:** `String` — for example, `"9.1.12"`
+
+---
+
+### `getName()`
+
+```java
+String getName()
+```
+
+Returns the human-readable display name of the mod.
+
+**Returns:** `String`
+
+---
+
+### `getDescription()`
+
+```java
+String getDescription()
+```
+
+Returns the description of the mod as declared in its metadata.
+
+**Returns:** `String`
+
+**Example — checking a mod's version:**
+
+```java
+Mod mod = Platform.getMod("architectury");
+System.out.println(mod.getName() + " " + mod.getVersion());
+// e.g. "Architectury API 9.1.12"
+```
+
+---
+
+## Branding
+
+### `getLogoFile(int preferredSize)`
+
+```java
+Optional<String> getLogoFile(int preferredSize)
+```
+
+Returns the logo file path relative to the mod file, if one is declared.
+
+<ParamField path="preferredSize" type="int" required>
+  The preferred image size in pixels. This hint is only used on Fabric; it is ignored on Forge.
+</ParamField>
+
+**Returns:** `Optional<String>` — the relative path to the logo, or `Optional.empty()` if no logo is declared.
+
+---
+
+## File paths
+
+### `getFilePaths()`
+
+```java
+List<Path> getFilePaths()
+```
+
+Returns all root paths associated with the mod. On Fabric a single mod may have multiple root paths when it ships separate source sets (for example a client-only source set alongside the common one).
+
+**Returns:** `List<Path>`
+
+---
+
+### `getFilePath()`
+
+```java
+@Deprecated(forRemoval = true)
+Path getFilePath()
+```
+
+<Warning>
+  This method is deprecated and will be removed in a future release. Use [`getFilePaths()`](#getfilepaths) instead, which correctly handles mods with multiple root paths.
+</Warning>
+
+**Returns:** `Path`
+
+---
+
+### `findResource(String... path)`
+
+```java
+Optional<Path> findResource(String... path)
+```
+
+Looks up a resource inside the mod file or folder by its path components. Returns the `Path` only if the resource actually exists.
+
+<ParamField path="path" type="String[]" required>
+  Path components pointing to the resource, for example `"assets"`, `"my-mod"`, `"icon.png"`.
+</ParamField>
+
+**Returns:** `Optional<Path>` — the resolved path if the resource exists, or `Optional.empty()` otherwise.
+
+**Example:**
+
+```java
+mod.findResource("assets", "my-mod", "icon.png").ifPresent(iconPath -> {
+    // load the icon
+});
+```
+
+---
+
+## Metadata
+
+### `getAuthors()`
+
+```java
+Collection<String> getAuthors()
+```
+
+Returns the list of author names declared in the mod metadata.
+
+**Returns:** `Collection<String>`
+
+---
+
+### `getLicense()`
+
+```java
+@Nullable
+Collection<String> getLicense()
+```
+
+Returns the license identifiers declared in the mod metadata, or `null` if none are declared.
+
+**Returns:** `Collection<String>` or `null`
+
+---
+
+### `getHomepage()`
+
+```java
+Optional<String> getHomepage()
+```
+
+Returns the mod's homepage URL if declared.
+
+**Returns:** `Optional<String>`
+
+---
+
+### `getSources()`
+
+```java
+Optional<String> getSources()
+```
+
+Returns the URL of the mod's source code repository if declared.
+
+**Returns:** `Optional<String>`
+
+---
+
+### `getIssueTracker()`
+
+```java
+Optional<String> getIssueTracker()
+```
+
+Returns the URL of the mod's issue tracker if declared.
+
+**Returns:** `Optional<String>`
+
+---
+
+## Configuration screen
+
+### `registerConfigurationScreen(ConfigurationScreenProvider provider)`
+
+```java
+@Environment(EnvType.CLIENT)
+void registerConfigurationScreen(ConfigurationScreenProvider provider)
+```
+
+Registers a configuration screen for the mod that mod list UIs (such as Mod Menu on Fabric) can open.
+
+<Warning>
+  This method is client-only. Only call it in client-side initialization code, or guard it with [`EnvExecutor.runInEnv`](/api/utils/env-executor#runInEnv).
+</Warning>
+
+<ParamField path="provider" type="ConfigurationScreenProvider" required>
+  A functional interface that receives the parent `Screen` and returns the configuration `Screen` to display.
+</ParamField>
+
+---
+
+### `ConfigurationScreenProvider`
+
+```java
+@FunctionalInterface
+@Environment(EnvType.CLIENT)
+interface ConfigurationScreenProvider {
+    Screen provide(Screen parent);
+}
+```
+
+Functional interface used to create a configuration screen. `parent` is the screen that was open before the configuration screen is shown; it is typically returned as the "back" target when the user closes your config screen.
+
+**Example:**
+
+```java
+Platform.getMod("my-mod").registerConfigurationScreen(parent -> new MyConfigScreen(parent));
+```

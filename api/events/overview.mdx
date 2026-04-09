@@ -1,0 +1,177 @@
+---
+title: 'Events overview'
+description: 'Core types and factory methods for the Architectury event system.'
+keywords: ['events', 'event system', 'EventResult', 'CompoundEventResult', 'EventFactory']
+---
+
+The Architectury event system provides a unified, platform-independent way to listen for and react to game events across Forge and Fabric. Every event is an instance of `Event<T>`, where `T` is a listener interface specific to that event.
+
+## The `Event<T>` interface
+
+`dev.architectury.event.Event<T>`
+
+All events implement this interface. You obtain a reference to the static event field (e.g., `LifecycleEvent.SERVER_STARTED`) and call `register` to add your listener.
+
+| Method | Signature | Description |
+|---|---|---|
+| `invoker()` | `T invoker()` | Returns a combined invoker that dispatches calls to all registered listeners. |
+| `register(listener)` | `void register(T listener)` | Adds a listener to the event. |
+| `unregister(listener)` | `void unregister(T listener)` | Removes a previously registered listener. |
+| `isRegistered(listener)` | `boolean isRegistered(T listener)` | Returns `true` if the listener is currently registered. |
+| `clearListeners()` | `void clearListeners()` | Removes all registered listeners. |
+
+<Note>
+Calling `invoker()` lazily constructs the combined invoker. If only one listener is registered, that listener is returned directly with no proxy overhead.
+</Note>
+
+### Quick example
+
+```java
+// Register a listener
+LifecycleEvent.SERVER_STARTED.register(server -> {
+    System.out.println("Server started: " + server.name());
+});
+
+// Manually invoke (rarely needed — the platform does this for you)
+LifecycleEvent.SERVER_STARTED.invoker().stateChanged(server);
+```
+
+---
+
+## `EventResult`
+
+`dev.architectury.event.EventResult`
+
+Returned by cancellable event listeners. It tells the event pipeline whether to continue calling further listeners and optionally carries a boolean outcome.
+
+### States
+
+| State | How to obtain | `interruptsFurtherEvaluation()` | `value()` |
+|---|---|---|---|
+| Pass | `EventResult.pass()` | `false` | `null` |
+| Interrupt (true) | `EventResult.interruptTrue()` | `true` | `true` |
+| Interrupt (false) | `EventResult.interruptFalse()` | `true` | `false` |
+| Interrupt (default) | `EventResult.interruptDefault()` | `true` | `null` |
+
+### Factory methods
+
+| Method | Description |
+|---|---|
+| `EventResult.pass()` | Allow subsequent listeners to run; do not change the outcome. |
+| `EventResult.interrupt(Boolean value)` | Stop further listeners. `null` falls back to vanilla logic; `true`/`false` sets the outcome. |
+| `EventResult.interruptTrue()` | Stop further listeners with a `true` outcome. |
+| `EventResult.interruptFalse()` | Stop further listeners with a `false` outcome. |
+| `EventResult.interruptDefault()` | Stop further listeners and fall back to vanilla logic. |
+
+### Query methods
+
+| Method | Description |
+|---|---|
+| `interruptsFurtherEvaluation()` | `true` if this result stops later listeners from running. |
+| `value()` | The `Boolean` outcome, or `null` if none is set. |
+| `isEmpty()` | `true` when `value()` is `null`. |
+| `isPresent()` | `true` when `value()` is non-null. |
+| `isTrue()` | `true` when `value()` is `Boolean.TRUE`. |
+| `isFalse()` | `true` when `value()` is `Boolean.FALSE`. |
+| `asMinecraft()` | Converts to `InteractionResult` (`SUCCESS`, `FAIL`, or `PASS`). |
+
+---
+
+## `CompoundEventResult<T>`
+
+`dev.architectury.event.CompoundEventResult<T>`
+
+Like `EventResult`, but also carries an arbitrary object as the result value (for example, an `ItemStack` to replace a bucket fill result). It wraps an inner `EventResult` and adds `object()`.
+
+### Factory methods
+
+| Method | Description |
+|---|---|
+| `CompoundEventResult.pass()` | Allow subsequent listeners; no outcome or object. |
+| `CompoundEventResult.interrupt(Boolean value, T object)` | Stop further listeners. `null` value falls back to vanilla. |
+| `CompoundEventResult.interruptTrue(T object)` | Stop further listeners with a `true` outcome and an object. |
+| `CompoundEventResult.interruptFalse(T object)` | Stop further listeners with a `false` outcome and an object. |
+| `CompoundEventResult.interruptDefault(T object)` | Stop further listeners with no boolean outcome and an object. |
+
+### Query methods
+
+All `EventResult` query methods are available, plus:
+
+| Method | Description |
+|---|---|
+| `object()` | Returns the extra data, or `null` when passing. |
+| `result()` | Returns the underlying `EventResult`. |
+| `asMinecraft()` | Converts to `InteractionResultHolder<T>`. |
+
+---
+
+## `EventFactory`
+
+`dev.architectury.event.EventFactory`
+
+Factory class used internally by Architectury to create `Event` instances. You can use these methods to create your own cross-platform events.
+
+| Method | Description |
+|---|---|
+| `of(Function<List<T>, T> function)` | Creates an event with a custom aggregation function. |
+| `createLoop(Class<T> clazz)` | Creates an event that calls all listeners in order; ignores return values. Suitable for fire-and-forget callbacks. |
+| `createEventResult(Class<T> clazz)` | Creates an event that calls listeners in order and stops as soon as one returns an interrupting `EventResult`. |
+| `createCompoundEventResult(Class<T> clazz)` | Like `createEventResult`, but stops when a listener returns an interrupting `CompoundEventResult`. |
+| `createConsumerLoop(Class<T> clazz)` | Creates an `Event<Consumer<T>>` that notifies all consumers in order. Automatically bridges to Forge events when the class carries `@ForgeEvent`. |
+| `createEventActorLoop(Class<T> clazz)` | Creates an `Event<EventActor<T>>` that calls actors in order and stops on the first interrupting result. Bridges to Forge when `@ForgeEvent`/`@ForgeEventCancellable` are present. |
+
+Each factory method also has a varargs overload that infers the class from the type parameter (e.g., `createLoop(T... typeGetter)`).
+
+<Tip>
+Use `createLoop` for observer-only events, `createEventResult` when listeners can cancel the action, and `createCompoundEventResult` when listeners can both cancel and replace a return value.
+</Tip>
+
+---
+
+## `EventActor<T>`
+
+`dev.architectury.event.EventActor<T>`
+
+A functional interface for listeners attached to `createEventActorLoop` events.
+
+```java
+@FunctionalInterface
+public interface EventActor<T> {
+    EventResult act(T t);
+}
+```
+
+---
+
+## Event categories
+
+### Common events (server and client)
+
+| Class | Package | Description |
+|---|---|---|
+| [`LifecycleEvent`](/api/events/lifecycle-events) | `dev.architectury.event.events.common` | Server startup, shutdown, level load/unload/save, and common setup. |
+| [`TickEvent`](/api/events/lifecycle-events) | `dev.architectury.event.events.common` | Server tick (pre/post), server level tick (pre/post), player tick (pre/post). |
+| [`PlayerEvent`](/api/events/player-events) | `dev.architectury.event.events.common` | Player join, quit, respawn, advancement, crafting, item pickup/drop, and more. |
+| [`InteractionEvent`](/api/events/interaction-events) | `dev.architectury.event.events.common` | Block/item/entity interactions and farmland trampling. |
+| [`BlockEvent`](/api/events/interaction-events) | `dev.architectury.event.events.common` | Block break, block place, falling block landing. |
+| [`EntityEvent`](/api/events/interaction-events) | `dev.architectury.event.events.common` | Entity death, hurt, spawn check, world add, chunk enter, animal tame. |
+| [`ChatEvent`](/api/events/lifecycle-events) | `dev.architectury.event.events.common` | Server-side chat decoration and message receipt. |
+| [`CommandRegistrationEvent`](/api/events/lifecycle-events) | `dev.architectury.event.events.common` | Command dispatcher registration. |
+| [`ExplosionEvent`](/api/events/interaction-events) | `dev.architectury.event.events.common` | Explosion pre and detonate phases. |
+| [`LootEvent`](/api/events/lifecycle-events) | `dev.architectury.event.events.common` | Loot table modification at load time. |
+
+### Client-only events
+
+| Class | Package | Description |
+|---|---|---|
+| [`ClientLifecycleEvent`](/api/events/client-events) | `dev.architectury.event.events.client` | Client start, stop, level load, and client setup. |
+| [`ClientTickEvent`](/api/events/client-events) | `dev.architectury.event.events.client` | Client tick (pre/post) and client level tick (pre/post). |
+| [`ClientPlayerEvent`](/api/events/client-events) | `dev.architectury.event.events.client` | Client-side player join, quit, and respawn. |
+| [`ClientChatEvent`](/api/events/client-events) | `dev.architectury.event.events.client` | Outgoing and incoming client chat messages. |
+| [`ClientGuiEvent`](/api/events/client-events) | `dev.architectury.event.events.client` | HUD rendering, screen init/render, container screen drawing, screen switching. |
+| [`ClientRawInputEvent`](/api/events/client-events) | `dev.architectury.event.events.client` | Raw mouse scroll, mouse click, and key press events (outside of screens). |
+| [`ClientScreenInputEvent`](/api/events/client-events) | `dev.architectury.event.events.client` | Mouse and keyboard input events scoped to an open `Screen`. |
+
+<Warning>
+Client event classes are annotated `@Environment(EnvType.CLIENT)`. Never reference them from server-only or common code — doing so will crash dedicated servers.
+</Warning>

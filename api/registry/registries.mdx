@@ -1,0 +1,181 @@
+---
+title: "Registries"
+description: "Platform-agnostic wrapper of Minecraft registries for registering mod content on both Fabric and Forge."
+keywords: ["Registries", "registry", "registrar", "multiplatform", "Fabric", "Forge"]
+---
+
+`Registries` is the entry point for all registry operations in Architectury API. It wraps the platform-specific registry system behind a single API, so you can write registration code once and have it work on both Fabric and Forge.
+
+Obtain an instance with the static factory `Registries.get(String modId)`. Instances are memoized — calling `get` with the same mod ID always returns the same object.
+
+```java
+Registries registries = Registries.get("mymod");
+```
+
+## Static methods
+
+### `Registries.get(String modId)`
+
+Returns the memoized `Registries` instance for the given mod ID. Creates a new instance on the first call.
+
+<ParamField path="modId" type="String" required>
+  Your mod's ID. Used to namespace registered entries when using `DeferredRegister`.
+</ParamField>
+
+```java
+Registries registries = Registries.get("mymod");
+```
+
+---
+
+### `Registries.getId(T object, ResourceKey<Registry<T>> fallback)`
+
+Resolves the `ResourceLocation` (registry name) of a registered object.
+
+- **Forge**: If the object implements `IForgeRegistryEntry`, uses `getRegistryName()`. Otherwise returns `null`.
+- **Fabric**: Looks up the object in the registry identified by `fallback`.
+
+Returns `null` if `fallback` is `null` or the object is not found.
+
+<ParamField path="object" type="T" required>
+  The registry entry to look up.
+</ParamField>
+
+<ParamField path="fallback" type="ResourceKey<Registry<T>>">
+  The registry key to use on Fabric, or as a fallback. Pass `null` to always receive `null`.
+</ParamField>
+
+```java
+ResourceLocation id = Registries.getId(myBlock, Registry.BLOCK_REGISTRY);
+// e.g. "mymod:my_block"
+```
+
+---
+
+## Instance methods
+
+### `get(ResourceKey<Registry<T>> key)`
+
+Returns the `Registrar<T>` for the given vanilla registry key. Use this to register or query entries in any built-in Minecraft registry.
+
+<ParamField path="key" type="ResourceKey<Registry<T>>" required>
+  The registry key. Use constants from `net.minecraft.core.Registry`, e.g. `Registry.BLOCK_REGISTRY`, `Registry.ITEM_REGISTRY`.
+</ParamField>
+
+```java
+Registrar<Block> blockRegistrar = registries.get(Registry.BLOCK_REGISTRY);
+Registrar<Item> itemRegistrar  = registries.get(Registry.ITEM_REGISTRY);
+```
+
+---
+
+### `forRegistry(ResourceKey<Registry<T>> key, Consumer<Registrar<T>> callback)`
+
+Registers a callback that is invoked when it is safe to register content into the given registry.
+
+<Note>
+  **Platform behaviour differs:**
+  - **Fabric** — the callback is called immediately when `forRegistry` is invoked.
+  - **Forge** — the callback is called during the `RegistryEvent.Register` event for that registry type.
+
+  Prefer `DeferredRegister` for most cases; use `forRegistry` when you need the `Registrar` object directly.
+</Note>
+
+<ParamField path="key" type="ResourceKey<Registry<T>>" required>
+  The registry to listen to.
+</ParamField>
+
+<ParamField path="callback" type="Consumer<Registrar<T>>" required>
+  Called with the `Registrar` at registration time.
+</ParamField>
+
+```java
+registries.forRegistry(Registry.BLOCK_REGISTRY, registrar -> {
+    registrar.register(new ResourceLocation("mymod", "my_block"), MyBlock::new);
+});
+```
+
+---
+
+### `builder(ResourceLocation registryId, T... typeGetter)`
+
+Creates a `RegistrarBuilder<T>` for defining a new custom registry. The vararg `typeGetter` must always be passed as an **empty array** — it exists solely to capture the generic type `T` at the call site.
+
+<ParamField path="registryId" type="ResourceLocation" required>
+  The unique identifier for the new registry.
+</ParamField>
+
+<ParamField path="typeGetter" type="T...">
+  Must be an empty array. Used for type inference only. Passing any elements throws `IllegalStateException`.
+</ParamField>
+
+```java
+Registrar<MyThing> myRegistry = registries
+    .<MyThing>builder(new ResourceLocation("mymod", "my_things"))
+    .syncToClients()
+    .saveToDisc()
+    .build();
+```
+
+---
+
+## `RegistrarBuilder<T>`
+
+Returned by `builder()`. Configure the registry before calling `build()`.
+
+| Method | Description |
+|---|---|
+| `saveToDisc()` | Persists registry data to disc (e.g. for datapack-aware registries). |
+| `syncToClients()` | Syncs registry contents to connected clients. |
+| `option(RegistrarOption)` | Applies a custom `RegistrarOption`. |
+| `build()` | Finalises and returns the `Registrar<T>`. |
+
+---
+
+## Getting registrars for items and blocks
+
+```java
+import dev.architectury.registry.registries.Registrar;
+import dev.architectury.registry.registries.Registries;
+import net.minecraft.core.Registry;
+import net.minecraft.world.item.Item;
+import net.minecraft.world.level.block.Block;
+
+public class MyRegistration {
+    private static final Registries REGISTRIES = Registries.get("mymod");
+
+    // Obtain registrars directly
+    public static final Registrar<Block> BLOCKS = REGISTRIES.get(Registry.BLOCK_REGISTRY);
+    public static final Registrar<Item>  ITEMS  = REGISTRIES.get(Registry.ITEM_REGISTRY);
+}
+```
+
+<Tip>
+  For most mods, `DeferredRegister` is more ergonomic than using `Registrar` directly. It handles timing, provides a `RegistrySupplier` for each entry, and is the recommended pattern.
+  See [DeferredRegister](/api/registry/deferred-register) for details.
+</Tip>
+
+## Creating a custom registry
+
+```java
+import dev.architectury.registry.registries.Registrar;
+import dev.architectury.registry.registries.Registries;
+import net.minecraft.resources.ResourceLocation;
+
+public class MyCustomRegistryInit {
+    static void init() {
+        Registries registries = Registries.get("mymod");
+
+        Registrar<MyThing> myThingRegistry = registries
+            .<MyThing>builder(new ResourceLocation("mymod", "my_things"))
+            .syncToClients()
+            .build();
+
+        // Register an entry immediately
+        myThingRegistry.register(
+            new ResourceLocation("mymod", "basic_thing"),
+            BasicThing::new
+        );
+    }
+}
+```

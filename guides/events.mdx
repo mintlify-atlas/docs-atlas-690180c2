@@ -1,0 +1,241 @@
+---
+title: "Working with events"
+description: "Subscribe to and cancel game events using Architectury's unified cross-platform event system."
+keywords: ["events", "EventResult", "CompoundEventResult", "PlayerEvent", "LifecycleEvent", "InteractionEvent", "register", "unregister"]
+---
+
+Architectury's event system lets you respond to game events — player joins, block breaks, server startup, and more — using a single API that works on both Fabric and Forge.
+
+Each event is an `Event<T>` where `T` is a functional interface. You subscribe to an event by calling `register(listener)` and unsubscribe by calling `unregister(listener)`. Listeners are called in registration order.
+
+<Note>
+  Most events have equivalent Forge and Fabric events noted in their Javadoc. The Architectury event fires in addition to those platform events, not instead of them.
+</Note>
+
+## Subscribing to an event
+
+Call `register(listener)` on the event constant. The listener is a lambda or method reference matching the event's functional interface.
+
+```java
+import dev.architectury.event.events.common.PlayerEvent;
+import dev.architectury.event.events.common.LifecycleEvent;
+
+// Listen for players joining the server
+PlayerEvent.PLAYER_JOIN.register(player -> {
+    System.out.println(player.getScoreboardName() + " joined the server");
+});
+
+// Listen for the server finishing startup
+LifecycleEvent.SERVER_STARTED.register(server -> {
+    System.out.println("Server started: " + server.getServerModName());
+});
+```
+
+Register listeners during mod initialization, before the game starts loading content.
+
+## Unregistering a listener
+
+Store a reference to the listener if you want to unregister it later.
+
+```java
+PlayerEvent.PlayerJoin myListener = player -> {
+    System.out.println(player.getScoreboardName() + " joined");
+};
+
+// Register
+PlayerEvent.PLAYER_JOIN.register(myListener);
+
+// Unregister later
+PlayerEvent.PLAYER_JOIN.unregister(myListener);
+```
+
+## Event results
+
+Events that can be cancelled or overridden return `EventResult` or `CompoundEventResult` from their listener method. The framework calls listeners in order and stops as soon as one returns an interrupting result.
+
+### EventResult
+
+`EventResult` signals whether the event should continue to other listeners and what the outcome should be.
+
+| Method | Interrupts? | Outcome |
+|---|---|---|
+| `EventResult.pass()` | No | No outcome set — vanilla logic runs |
+| `EventResult.interruptTrue()` | Yes | `true` (allow / success) |
+| `EventResult.interruptFalse()` | Yes | `false` (deny / failure) |
+| `EventResult.interruptDefault()` | Yes | No outcome (fall back to default) |
+| `EventResult.interrupt(Boolean)` | Yes | `true`, `false`, or `null` |
+
+```java
+import dev.architectury.event.EventResult;
+import dev.architectury.event.events.common.PlayerEvent;
+
+// Cancel all item drops — return interruptFalse() to deny the drop
+PlayerEvent.DROP_ITEM.register((player, itemEntity) -> {
+    if (player.isCreative()) {
+        // Let creative-mode drops pass through unchanged
+        return EventResult.pass();
+    }
+    // Cancel the drop for survival players
+    return EventResult.interruptFalse();
+});
+```
+
+### CompoundEventResult
+
+`CompoundEventResult<T>` extends the concept of `EventResult` by also carrying a return value of type `T`. Use it for events that replace a value, such as bucket fill results or right-click item results.
+
+| Method | Interrupts? | Outcome | Object |
+|---|---|---|---|
+| `CompoundEventResult.pass()` | No | No outcome | `null` |
+| `CompoundEventResult.interruptTrue(object)` | Yes | `true` | provided |
+| `CompoundEventResult.interruptFalse(object)` | Yes | `false` | provided |
+| `CompoundEventResult.interruptDefault(object)` | Yes | No outcome | provided |
+| `CompoundEventResult.interrupt(Boolean, object)` | Yes | `true`/`false`/`null` | provided |
+
+```java
+import dev.architectury.event.CompoundEventResult;
+import dev.architectury.event.events.common.InteractionEvent;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
+
+// Override right-click item — return a different ItemStack as the result
+InteractionEvent.RIGHT_CLICK_ITEM.register((player, hand) -> {
+    ItemStack held = player.getItemInHand(hand);
+    if (held.is(Items.STICK)) {
+        // Interrupt and supply a diamond as the "use" result
+        return CompoundEventResult.interruptTrue(new ItemStack(Items.DIAMOND));
+    }
+    return CompoundEventResult.pass();
+});
+```
+
+## Practical examples
+
+### Cancel a block break
+
+```java
+import dev.architectury.event.EventResult;
+import dev.architectury.event.events.common.BlockEvent;
+import net.minecraft.world.level.block.Blocks;
+
+BlockEvent.BREAK.register((level, pos, state, player, xp) -> {
+    if (state.is(Blocks.BEDROCK)) {
+        // Prevent breaking bedrock even in creative mode
+        return EventResult.interruptFalse();
+    }
+    return EventResult.pass();
+});
+```
+
+### React to server lifecycle
+
+```java
+import dev.architectury.event.events.common.LifecycleEvent;
+
+LifecycleEvent.SERVER_STARTING.register(server -> {
+    System.out.println("Server is starting up...");
+});
+
+LifecycleEvent.SERVER_STOPPED.register(server -> {
+    System.out.println("Server has stopped.");
+});
+```
+
+### Listen for player respawn
+
+```java
+import dev.architectury.event.events.common.PlayerEvent;
+
+PlayerEvent.PLAYER_RESPAWN.register((newPlayer, conqueredEnd) -> {
+    if (!conqueredEnd) {
+        newPlayer.sendSystemMessage(
+            net.minecraft.network.chat.Component.literal("Welcome back!")
+        );
+    }
+});
+```
+
+### Prevent farmland trampling with diamond boots
+
+```java
+import dev.architectury.event.EventResult;
+import dev.architectury.event.events.common.InteractionEvent;
+import net.minecraft.world.entity.EquipmentSlot;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.item.Items;
+
+InteractionEvent.FARMLAND_TRAMPLE.register((level, pos, state, distance, entity) -> {
+    if (entity instanceof Player player
+            && player.getItemBySlot(EquipmentSlot.FEET).is(Items.DIAMOND_BOOTS)) {
+        // Diamond boots protect farmland — cancel the trample
+        return EventResult.interruptFalse();
+    }
+    return EventResult.pass();
+});
+```
+
+## Available event classes
+
+<AccordionGroup>
+  <Accordion title="PlayerEvent">
+    Events related to player actions, found in `dev.architectury.event.events.common.PlayerEvent`.
+
+    | Constant | Type | Description |
+    |---|---|---|
+    | `PLAYER_JOIN` | loop | Player joins the server |
+    | `PLAYER_QUIT` | loop | Player disconnects |
+    | `PLAYER_RESPAWN` | loop | Player respawns or leaves the End |
+    | `PLAYER_CLONE` | loop | New player entity is created on respawn (copy data here) |
+    | `PLAYER_ADVANCEMENT` | loop | Player earns an advancement |
+    | `DROP_ITEM` | event result | Player drops an item |
+    | `PICKUP_ITEM_PRE` | event result | Player attempts to pick up an item |
+    | `PICKUP_ITEM_POST` | loop | Player has picked up an item |
+    | `CRAFT_ITEM` | loop | Player crafts an item |
+    | `SMELT_ITEM` | loop | Player takes a smelted item |
+    | `CHANGE_DIMENSION` | loop | Player changes dimension |
+    | `OPEN_MENU` | loop | Player opens a container menu |
+    | `CLOSE_MENU` | loop | Player closes a container menu |
+    | `FILL_BUCKET` | compound result | Player fills a bucket |
+    | `ATTACK_ENTITY` | event result | Player left-clicks an entity |
+  </Accordion>
+
+  <Accordion title="LifecycleEvent">
+    Server and world lifecycle events, found in `dev.architectury.event.events.common.LifecycleEvent`.
+
+    | Constant | Description |
+    |---|---|
+    | `SERVER_BEFORE_START` | Earliest point the server is available |
+    | `SERVER_STARTING` | Server is starting |
+    | `SERVER_STARTED` | Server is ready to accept players |
+    | `SERVER_STOPPING` | Server is beginning shutdown |
+    | `SERVER_STOPPED` | Server has shut down |
+    | `SERVER_LEVEL_LOAD` | A server level is loaded |
+    | `SERVER_LEVEL_UNLOAD` | A server level is unloaded |
+    | `SERVER_LEVEL_SAVE` | A server level is saved |
+    | `SETUP` | Common setup phase — equivalent to `FMLCommonSetupEvent` on Forge |
+  </Accordion>
+
+  <Accordion title="InteractionEvent">
+    Block and item interaction events, found in `dev.architectury.event.events.common.InteractionEvent`.
+
+    | Constant | Type | Description |
+    |---|---|---|
+    | `LEFT_CLICK_BLOCK` | event result | Player left-clicks a block |
+    | `RIGHT_CLICK_BLOCK` | event result | Player right-clicks a block |
+    | `RIGHT_CLICK_ITEM` | compound result | Player uses an item |
+    | `CLIENT_LEFT_CLICK_AIR` | loop | Client-only: player left-clicks air |
+    | `CLIENT_RIGHT_CLICK_AIR` | loop | Client-only: player right-clicks air |
+    | `INTERACT_ENTITY` | event result | Player right-clicks an entity |
+    | `FARMLAND_TRAMPLE` | event result | Entity attempts to trample farmland |
+  </Accordion>
+</AccordionGroup>
+
+## How evaluation order works
+
+Listeners run in the order they were registered. For events that return `EventResult` or `CompoundEventResult`:
+
+1. The framework calls each listener in sequence.
+2. If a listener returns an interrupting result (`interruptTrue`, `interruptFalse`, or `interruptDefault`), the framework stops and returns that result immediately.
+3. If all listeners return `pass()`, the framework returns `EventResult.pass()` as the final result, and vanilla logic proceeds.
+
+This means the first listener to interrupt wins. If you need your listener to always run regardless of other mods, register it early in your mod initializer.

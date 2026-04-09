@@ -1,0 +1,404 @@
+---
+title: 'Lifecycle events'
+description: 'Server lifecycle, tick, chat, command registration, and loot table events for the Architectury event system.'
+keywords: ['lifecycle', 'server', 'tick', 'chat', 'commands', 'loot', 'LifecycleEvent', 'TickEvent']
+---
+
+This page covers events related to the server lifecycle (`LifecycleEvent`), server and player ticks (`TickEvent`), chat messages (`ChatEvent`), command registration (`CommandRegistrationEvent`), and loot table modification (`LootEvent`).
+
+---
+
+## `LifecycleEvent`
+
+`dev.architectury.event.events.common.LifecycleEvent`
+
+<AccordionGroup>
+  <Accordion title="SERVER_BEFORE_START — Event&lt;ServerState&gt;">
+    Invoked before initial server startup. This is the earliest point at which the `MinecraftServer` instance is available.
+
+    **Listener interface:** `LifecycleEvent.ServerState`
+
+    ```java
+    void stateChanged(MinecraftServer instance);
+    ```
+
+    | Parameter | Type | Description |
+    |---|---|---|
+    | `instance` | `MinecraftServer` | The server that is about to start. |
+
+    **Forge equivalent:** `FMLServerAboutToStartEvent`
+    **Fabric equivalent:** `ServerLifecycleEvents#SERVER_STARTING`
+  </Accordion>
+
+  <Accordion title="SERVER_STARTING — Event&lt;ServerState&gt;">
+    Invoked during server startup.
+
+    **Listener interface:** `LifecycleEvent.ServerState`
+
+    ```java
+    void stateChanged(MinecraftServer instance);
+    ```
+
+    | Parameter | Type | Description |
+    |---|---|---|
+    | `instance` | `MinecraftServer` | The server that is starting. |
+
+    **Forge equivalent:** `FMLServerStartingEvent`
+  </Accordion>
+
+  <Accordion title="SERVER_STARTED — Event&lt;ServerState&gt;">
+    Invoked when the server has started and is ready to accept players.
+
+    **Listener interface:** `LifecycleEvent.ServerState`
+
+    ```java
+    void stateChanged(MinecraftServer instance);
+    ```
+
+    | Parameter | Type | Description |
+    |---|---|---|
+    | `instance` | `MinecraftServer` | The fully started server. |
+
+    **Forge equivalent:** `FMLServerStartedEvent`
+    **Fabric equivalent:** `ServerLifecycleEvents#SERVER_STARTED`
+  </Accordion>
+
+  <Accordion title="SERVER_STOPPING — Event&lt;ServerState&gt;">
+    Invoked when the server begins shutting down.
+
+    **Listener interface:** `LifecycleEvent.ServerState`
+
+    ```java
+    void stateChanged(MinecraftServer instance);
+    ```
+
+    | Parameter | Type | Description |
+    |---|---|---|
+    | `instance` | `MinecraftServer` | The server that is stopping. |
+
+    **Forge equivalent:** `FMLServerStoppingEvent`
+    **Fabric equivalent:** `ServerLifecycleEvents#SERVER_STOPPING`
+  </Accordion>
+
+  <Accordion title="SERVER_STOPPED — Event&lt;ServerState&gt;">
+    Invoked when the server has finished stopping and is about to fully shut down.
+
+    **Listener interface:** `LifecycleEvent.ServerState`
+
+    ```java
+    void stateChanged(MinecraftServer instance);
+    ```
+
+    | Parameter | Type | Description |
+    |---|---|---|
+    | `instance` | `MinecraftServer` | The server that has stopped. |
+
+    **Forge equivalent:** `FMLServerStoppedEvent`
+    **Fabric equivalent:** `ServerLifecycleEvents#SERVER_STOPPED`
+  </Accordion>
+
+  <Accordion title="SERVER_LEVEL_LOAD — Event&lt;ServerLevelState&gt;">
+    Invoked when a level is loaded on the server side.
+
+    **Listener interface:** `LifecycleEvent.ServerLevelState`
+
+    ```java
+    void act(ServerLevel world);
+    ```
+
+    | Parameter | Type | Description |
+    |---|---|---|
+    | `world` | `ServerLevel` | The level that was loaded. |
+
+    **Forge equivalent:** `WorldEvent.Load` (server)
+    **Fabric equivalent:** `ServerWorldEvents#LOAD`
+  </Accordion>
+
+  <Accordion title="SERVER_LEVEL_UNLOAD — Event&lt;ServerLevelState&gt;">
+    Invoked when a level is unloaded on the server side.
+
+    **Listener interface:** `LifecycleEvent.ServerLevelState`
+
+    ```java
+    void act(ServerLevel world);
+    ```
+
+    | Parameter | Type | Description |
+    |---|---|---|
+    | `world` | `ServerLevel` | The level that was unloaded. |
+
+    **Forge equivalent:** `WorldEvent.Unload` (server)
+    **Fabric equivalent:** `ServerWorldEvents#UNLOAD`
+  </Accordion>
+
+  <Accordion title="SERVER_LEVEL_SAVE — Event&lt;ServerLevelState&gt;">
+    Invoked when a level is being saved.
+
+    **Listener interface:** `LifecycleEvent.ServerLevelState`
+
+    ```java
+    void act(ServerLevel world);
+    ```
+
+    | Parameter | Type | Description |
+    |---|---|---|
+    | `world` | `ServerLevel` | The level being saved. |
+
+    **Forge equivalent:** `WorldEvent.Save`
+  </Accordion>
+
+  <Accordion title="SETUP — Event&lt;Runnable&gt;">
+    Invoked once common setup has begun. Registries should be initialised by this point on Forge; on Fabric there is no hard guarantee.
+
+    **Listener interface:** `Runnable`
+
+    ```java
+    void run();
+    ```
+
+    **Forge equivalent:** `FMLCommonSetupEvent`
+    **Fabric:** Triggered from the Architectury API client/server entrypoint initialisation.
+  </Accordion>
+</AccordionGroup>
+
+### Listener interfaces
+
+| Interface | Method | Description |
+|---|---|---|
+| `LifecycleEvent.ServerState` | `stateChanged(MinecraftServer)` | Called when the server state changes. |
+| `LifecycleEvent.ServerLevelState` | `act(ServerLevel)` | Called when a server level state changes. |
+
+---
+
+## `TickEvent`
+
+`dev.architectury.event.events.common.TickEvent<T>`
+
+<AccordionGroup>
+  <Accordion title="SERVER_PRE — Event&lt;TickEvent.Server&gt;">
+    Invoked before a server tick is processed.
+
+    **Listener interface:** `TickEvent.Server`
+
+    ```java
+    void tick(MinecraftServer instance);
+    ```
+
+    **Forge equivalent:** `ServerTickEvent` (START phase)
+  </Accordion>
+
+  <Accordion title="SERVER_POST — Event&lt;TickEvent.Server&gt;">
+    Invoked after a server tick has been processed.
+
+    **Listener interface:** `TickEvent.Server`
+
+    ```java
+    void tick(MinecraftServer instance);
+    ```
+
+    **Forge equivalent:** `ServerTickEvent` (END phase)
+  </Accordion>
+
+  <Accordion title="SERVER_LEVEL_PRE — Event&lt;TickEvent.ServerLevelTick&gt;">
+    Invoked before a server level tick is processed.
+
+    **Listener interface:** `TickEvent.ServerLevelTick`
+
+    ```java
+    void tick(ServerLevel instance);
+    ```
+
+    **Forge equivalent:** `WorldTickEvent` (START phase)
+  </Accordion>
+
+  <Accordion title="SERVER_LEVEL_POST — Event&lt;TickEvent.ServerLevelTick&gt;">
+    Invoked after a server level tick has been processed.
+
+    **Listener interface:** `TickEvent.ServerLevelTick`
+
+    ```java
+    void tick(ServerLevel instance);
+    ```
+
+    **Forge equivalent:** `WorldTickEvent` (END phase)
+  </Accordion>
+
+  <Accordion title="PLAYER_PRE — Event&lt;TickEvent.Player&gt;">
+    Invoked before a player tick is processed.
+
+    **Listener interface:** `TickEvent.Player`
+
+    ```java
+    void tick(Player instance);
+    ```
+
+    **Forge equivalent:** `PlayerTickEvent` (START phase)
+  </Accordion>
+
+  <Accordion title="PLAYER_POST — Event&lt;TickEvent.Player&gt;">
+    Invoked after a player tick has been processed.
+
+    **Listener interface:** `TickEvent.Player`
+
+    ```java
+    void tick(Player instance);
+    ```
+
+    **Forge equivalent:** `PlayerTickEvent` (END phase)
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## `ChatEvent`
+
+`dev.architectury.event.events.common.ChatEvent`
+
+<AccordionGroup>
+  <Accordion title="DECORATE — Event&lt;ChatEvent.Decorate&gt;">
+    Invoked when the server receives a message from a client, giving you a chance to modify the displayed component.
+
+    **Listener interface:** `ChatEvent.Decorate`
+
+    ```java
+    void decorate(@Nullable ServerPlayer player, ChatEvent.ChatComponent component);
+    ```
+
+    | Parameter | Type | Description |
+    |---|---|---|
+    | `player` | `@Nullable ServerPlayer` | The player who sent the message, or `null`. |
+    | `component` | `ChatEvent.ChatComponent` | Mutable wrapper around the chat component. Call `component.get()` / `component.set(Component)` to read or replace it. |
+
+    **Forge equivalent:** `ServerChatEvent`
+  </Accordion>
+
+  <Accordion title="RECEIVED — Event&lt;ChatEvent.Received&gt;">
+    Invoked when the server receives a message from a client. Return an interrupting `EventResult` to suppress vanilla processing.
+
+    **Listener interface:** `ChatEvent.Received`
+
+    ```java
+    EventResult received(@Nullable ServerPlayer player, Component component);
+    ```
+
+    | Parameter | Type | Description |
+    |---|---|---|
+    | `player` | `@Nullable ServerPlayer` | The player who sent the message, or `null`. |
+    | `component` | `Component` | The chat message component. |
+
+    **Returns:** `EventResult` — return `EventResult.interruptTrue()` to cancel the message.
+
+    **Forge equivalent:** `ServerChatEvent`
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## `CommandRegistrationEvent`
+
+`dev.architectury.event.events.common.CommandRegistrationEvent`
+
+### EVENT — Event&lt;CommandRegistrationEvent&gt;
+
+This interface is also the listener type. Implement it to register commands with the Brigadier dispatcher.
+
+```java
+void register(
+    CommandDispatcher<CommandSourceStack> dispatcher,
+    CommandBuildContext registry,
+    Commands.CommandSelection selection
+);
+```
+
+| Parameter | Type | Description |
+|---|---|---|
+| `dispatcher` | `CommandDispatcher<CommandSourceStack>` | The command dispatcher to register commands to. |
+| `registry` | `CommandBuildContext` | Context for building argument types. |
+| `selection` | `Commands.CommandSelection` | Whether the command is available in integrated servers, dedicated servers, or both. |
+
+**Forge equivalent:** `RegisterCommandsEvent`
+**Fabric equivalent:** `CommandRegistrationCallback`
+
+---
+
+## `LootEvent`
+
+`dev.architectury.event.events.common.LootEvent`
+
+### MODIFY_LOOT_TABLE — Event&lt;LootEvent.ModifyLootTable&gt;
+
+Invoked for each loot table when it is loaded. Use this event to add loot pools to existing tables without replacing them.
+
+**Listener interface:** `LootEvent.ModifyLootTable`
+
+```java
+void modifyLootTable(
+    LootTables lootTables,
+    ResourceLocation id,
+    LootEvent.LootTableModificationContext context,
+    boolean builtin
+);
+```
+
+| Parameter | Type | Description |
+|---|---|---|
+| `lootTables` | `LootTables` | The loot tables instance containing all loaded tables. |
+| `id` | `ResourceLocation` | The ID of the loot table being loaded. |
+| `context` | `LootTableModificationContext` | Use `context.addPool(LootPool)` to inject new pools. |
+| `builtin` | `boolean` | `true` if the table is built into vanilla or a mod; `false` if it comes from a data pack. |
+
+<Note>
+On Forge, this event only fires for built-in loot tables due to platform limitations with `LootTableLoadEvent`. Check `builtin` before modifying to stay consistent across platforms.
+</Note>
+
+---
+
+## Usage examples
+
+### Detecting when the server starts
+
+```java
+LifecycleEvent.SERVER_STARTED.register(server -> {
+    MyMod.LOGGER.info("Server started: {}", server.name());
+});
+```
+
+### Running logic every server tick
+
+```java
+TickEvent.SERVER_PRE.register(server -> {
+    long tick = server.getTickCount();
+    if (tick % 20 == 0) {
+        // Once per second
+        MyMod.LOGGER.debug("Tick: {}", tick);
+    }
+});
+```
+
+### Registering a command
+
+```java
+CommandRegistrationEvent.EVENT.register((dispatcher, registry, selection) -> {
+    dispatcher.register(
+        Commands.literal("hello")
+            .executes(ctx -> {
+                ctx.getSource().sendSuccess(
+                    Component.literal("Hello, world!"), false
+                );
+                return 1;
+            })
+    );
+});
+```
+
+### Adding a drop to the dirt loot table
+
+```java
+LootEvent.MODIFY_LOOT_TABLE.register((lootTables, id, context, builtin) -> {
+    if (builtin && Blocks.DIRT.getLootTable().equals(id)) {
+        LootPool.Builder pool = LootPool.lootPool()
+            .add(LootItem.lootTableItem(Items.DIAMOND));
+        context.addPool(pool);
+    }
+});
+```

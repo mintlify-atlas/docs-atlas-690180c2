@@ -1,0 +1,137 @@
+---
+title: "Environments"
+description: "Understand the CLIENT and SERVER environments in Minecraft and how Architectury's Env enum lets you write environment-safe code in common modules."
+keywords: ["environment", "client", "server", "Env", "EnvExecutor", "EnvType", "Dist"]
+---
+
+Minecraft runs in two distinct environments: **CLIENT** (the game client the player sees) and **SERVER** (the dedicated or integrated server that runs the world). Some code is only valid in one environment, and calling it in the other can crash the game.
+
+Architectury provides `Env` and `EnvExecutor` to let you handle environments in a platform-agnostic way from your common module.
+
+## The `Env` enum
+
+`Env` is a platform-agnostic wrapper around Fabric's `EnvType` and Forge's `Dist`:
+
+```java
+package dev.architectury.utils;
+
+public enum Env {
+    CLIENT,
+    SERVER;
+
+    /** Converts a platform-specific enum (EnvType or Dist) to Env. */
+    public static Env fromPlatform(Object type) { ... }
+
+    /** Converts this Env back to the platform-specific enum. */
+    public EnvType toPlatform() { ... }
+}
+```
+
+| `Env` value | Fabric equivalent | Forge equivalent |
+|---|---|---|
+| `Env.CLIENT` | `EnvType.CLIENT` | `Dist.CLIENT` |
+| `Env.SERVER` | `EnvType.SERVER` | `Dist.DEDICATED_SERVER` |
+
+## Checking the current environment
+
+Use `Platform.getEnvironment()` to retrieve the `Env` for the currently-running process:
+
+```java
+import dev.architectury.platform.Platform;
+import dev.architectury.utils.Env;
+
+if (Platform.getEnvironment() == Env.CLIENT) {
+    // Only runs on the client
+}
+```
+
+If you prefer the platform-specific type directly, `Platform.getEnv()` returns `EnvType` (remapped to `Dist` on Forge):
+
+```java
+EnvType envType = Platform.getEnv();
+```
+
+## Running code in a specific environment
+
+`EnvExecutor` provides helpers that gate execution to a single environment. These methods accept a `Supplier<Runnable>` (not a plain `Runnable`) so that the lambda body — and any client-only class references inside it — is never loaded by the class loader in the wrong environment.
+
+### `runInEnv` — execute a side effect
+
+```java
+import dev.architectury.utils.Env;
+import dev.architectury.utils.EnvExecutor;
+
+// Registers a client-only listener only when running on the client.
+EnvExecutor.runInEnv(Env.CLIENT, () -> () -> {
+    ClientLifecycleEvent.CLIENT_STARTED.register(client -> {
+        System.out.println("Client started!");
+    });
+});
+```
+
+### `getInEnv` — retrieve a value or empty
+
+```java
+Optional<Minecraft> client = EnvExecutor.getInEnv(Env.CLIENT, () -> Minecraft::getInstance);
+```
+
+### `getEnvSpecific` — choose between two suppliers
+
+```java
+// Returns a MessageSink backed by the on-screen overlay on the client,
+// or the console on the server.
+MessageSink sink = EnvExecutor.getEnvSpecific(
+    () -> ClientOverlayMessageSink::new,
+    () -> ConsoleMessageSink::new
+);
+```
+
+<Note>
+  The double-supplier pattern (`() -> () -> ...`) is intentional. The outer lambda is always evaluated to get the inner supplier, but the inner supplier is only invoked when the environment matches. This prevents the class loader from touching client-only classes on the server.
+</Note>
+
+## The `@Environment` annotation
+
+Fabric API's `@Environment(EnvType.CLIENT)` marks a class or method as client-only. Architectury code uses this annotation on methods that must not be loaded on a dedicated server:
+
+```java
+import net.fabricmc.api.EnvType;
+import net.fabricmc.api.Environment;
+
+@Environment(EnvType.CLIENT)
+public static void initializeClient() {
+    // Safe to reference Minecraft, Screen, and other client classes here
+    ClientLifecycleEvent.CLIENT_STARTED.register(client -> { ... });
+}
+```
+
+On Forge, the equivalent is `@OnlyIn(Dist.CLIENT)`. Architectury Loom handles the remapping between the two.
+
+<Warning>
+  If a class or method annotated with `@Environment(EnvType.CLIENT)` is referenced from code that runs on the server, the JVM will throw a `NoClassDefFoundError` or `MethodNotFoundException` at runtime. Always guard such references with `EnvExecutor.runInEnv` or an explicit environment check.
+</Warning>
+
+## Why environments matter
+
+Client-only classes such as `Minecraft`, `Screen`, `Font`, and renderer classes do not exist on a dedicated server. Referencing them in code that runs on both sides will crash the server. The pattern below is the standard way to safely call into client-only code from a shared initializer:
+
+```java
+public static void initialize() {
+    // Common initialization — safe on both sides
+    DebugEvents.initialize();
+
+    // Client-only initialization — gated with EnvExecutor
+    EnvExecutor.runInEnv(Env.CLIENT, () -> MyMod.Client::initializeClient);
+}
+
+@Environment(EnvType.CLIENT)
+public static class Client {
+    @Environment(EnvType.CLIENT)
+    public static void initializeClient() {
+        // Reference client classes freely here
+        EntityRendererRegistry.register(MY_ENTITY, MyRenderer::new);
+    }
+}
+```
+
+The `Supplier<Runnable>` form (`() -> MyMod.Client::initializeClient`) ensures the inner method reference — and therefore the `Client` class itself — is only resolved when the environment is CLIENT.

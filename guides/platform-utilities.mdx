@@ -1,0 +1,239 @@
+---
+title: "Platform utilities"
+description: "Detect the current mod loader, environment, and loaded mods at runtime using Architectury's platform-agnostic utility classes."
+keywords: ["Platform", "Env", "EnvExecutor", "isFabric", "isForge", "getEnvironment", "isModLoaded", "getMod", "runtime detection"]
+---
+
+Architectury provides two classes for runtime platform inspection:
+
+- **`Platform`** — detect the mod loader, environment, game folders, and loaded mods.
+- **`EnvExecutor`** — run code only on a specific environment (client or server) without triggering class-loading errors.
+
+## Platform detection
+
+### Mod loader
+
+```java
+import dev.architectury.platform.Platform;
+
+if (Platform.isFabric()) {
+    System.out.println("Running on Fabric");
+}
+
+if (Platform.isForge()) {
+    System.out.println("Running on Forge");
+}
+```
+
+### Environment
+
+`Platform.getEnvironment()` returns `Env.CLIENT` or `Env.SERVER` — a platform-agnostic enum that works identically on Fabric and Forge.
+
+```java
+import dev.architectury.platform.Platform;
+import dev.architectury.utils.Env;
+
+Env env = Platform.getEnvironment();
+
+if (env == Env.CLIENT) {
+    System.out.println("Running on the client");
+} else {
+    System.out.println("Running on the server");
+}
+```
+
+<Note>
+  `Env` is Architectury's platform-agnostic equivalent of Fabric's `EnvType` and Forge's `Dist`. Use `Env` in common code so you don't need to branch between the two.
+</Note>
+
+### Game folders
+
+`Platform` exposes the canonical filesystem paths for the current instance. All returned `Path` values are absolute and normalized.
+
+```java
+import java.nio.file.Path;
+
+// Root game directory (.minecraft or server folder)
+Path gameDir = Platform.getGameFolder();
+
+// config/ directory
+Path configDir = Platform.getConfigFolder();
+
+// mods/ directory
+Path modsDir = Platform.getModsFolder();
+```
+
+### Development environment
+
+```java
+boolean isDev = Platform.isDevelopmentEnvironment();
+```
+
+Use this to enable debug output or verbose logging that you don't want in production.
+
+---
+
+## Querying loaded mods
+
+### Check if a mod is loaded
+
+```java
+boolean optifineLoaded = Platform.isModLoaded("optifine");
+
+if (Platform.isModLoaded("jei")) {
+    // Register JEI compatibility
+}
+```
+
+### Get a mod container
+
+`Platform.getMod(id)` returns a `Mod` instance. It throws `NoSuchElementException` if the mod is not loaded.
+
+```java
+import dev.architectury.platform.Mod;
+
+Mod mod = Platform.getMod("mymod");
+
+String version = mod.getVersion();
+String name = mod.getName();
+String description = mod.getDescription();
+```
+
+Use `Platform.getOptionalMod(id)` when the mod may or may not be present:
+
+```java
+import java.util.Optional;
+
+Optional<Mod> jei = Platform.getOptionalMod("jei");
+jei.ifPresent(m -> System.out.println("JEI version: " + m.getVersion()));
+```
+
+### List all loaded mods
+
+```java
+import java.util.Collection;
+
+Collection<Mod> allMods = Platform.getMods();
+for (Mod mod : allMods) {
+    System.out.println(mod.getModId() + " " + mod.getVersion());
+}
+
+// Or just the IDs
+Collection<String> modIds = Platform.getModIds();
+```
+
+### Mod metadata
+
+The `Mod` interface exposes metadata declared in the mod's manifest (`fabric.mod.json` or `mods.toml`):
+
+```java
+Mod mod = Platform.getMod("mymod");
+
+mod.getAuthors();          // Collection<String>
+mod.getHomepage();         // Optional<String>
+mod.getSources();          // Optional<String>
+mod.getIssueTracker();     // Optional<String>
+mod.getLicense();          // Collection<String> (nullable)
+mod.getFilePaths();        // List<Path> — root paths for the mod's resources
+mod.findResource("assets", "mymod", "textures", "block", "example.png"); // Optional<Path>
+```
+
+---
+
+## EnvExecutor
+
+`EnvExecutor` runs code only on a specific environment. It avoids loading client-only or server-only classes on the wrong side.
+
+<Warning>
+  Never reference client-only classes (anything in `net.minecraft.client.*`) directly in common code. The class loader on a dedicated server does not have those classes and will crash. Always use `EnvExecutor` to guard such references.
+</Warning>
+
+### Run code on one side
+
+```java
+import dev.architectury.utils.Env;
+import dev.architectury.utils.EnvExecutor;
+
+// Run a block only on the client
+EnvExecutor.runInEnv(Env.CLIENT, () -> () -> {
+    // This lambda is only evaluated on the client — safe to reference client classes here
+    net.minecraft.client.Minecraft.getInstance().tell(() ->
+        System.out.println("Hello from the client thread!")
+    );
+});
+
+// Run a block only on the server
+EnvExecutor.runInEnv(Env.SERVER, () -> () -> {
+    System.out.println("Running on dedicated server");
+});
+```
+
+The outer `Supplier<Runnable>` structure is intentional — the outer supplier is evaluated on every side, but the inner `Runnable` is only constructed when the environment matches. This prevents the JVM from loading client-only classes on the server.
+
+### Get a value from one side
+
+```java
+import java.util.Optional;
+
+Optional<String> clientValue = EnvExecutor.getInEnv(Env.CLIENT, () -> () -> {
+    return net.minecraft.client.Minecraft.getInstance().getUser().getName();
+});
+
+clientValue.ifPresent(name -> System.out.println("Logged in as: " + name));
+```
+
+### Get an environment-specific value (both sides)
+
+`getEnvSpecific` is useful when you need a single value that differs by environment, such as a message sink or renderer that has different implementations per side:
+
+```java
+// Returns the client supplier on the client, server supplier on the server
+MyService service = EnvExecutor.getEnvSpecific(
+    () -> MyClientService::new,   // client factory
+    () -> MyServerService::new    // server factory
+);
+```
+
+---
+
+## Runtime checks vs @ExpectPlatform
+
+<AccordionGroup>
+  <Accordion title="When to use runtime Platform checks">
+    Use `Platform.isFabric()` or `Platform.isForge()` when:
+
+    - You need to call a loader-specific API that is available in common code but behaves differently per loader.
+    - The diverging logic is simple and doesn't require separate class files.
+    - You are conditionally registering optional compatibility (e.g., only register a Forge-specific event listener when on Forge).
+
+    ```java
+    if (Platform.isForge()) {
+        // Forge-specific setup — no separate class needed
+        registerForgeCompat();
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="When to use @ExpectPlatform">
+    Use `@ExpectPlatform` when:
+
+    - The platform-specific implementation requires importing loader-specific classes that don't exist on the other platform.
+    - You want compile-time separation of concerns with distinct `Impl` classes in `fabric/` and `forge/` source sets.
+    - The method is called frequently and you want the overhead of the runtime check to be zero (the body is rewritten at compile time).
+
+    See the [@ExpectPlatform guide](/concepts/expect-platform) for the full workflow.
+  </Accordion>
+
+  <Accordion title="When to use EnvExecutor">
+    Use `EnvExecutor.runInEnv` when:
+
+    - You need to reference client-only or server-only classes from a common code path.
+    - You cannot annotate the method with `@Environment(EnvType.CLIENT)` because it is called from both sides.
+    - You are initializing client-specific systems (renderers, key binds, overlays) inside a common initializer.
+
+    ```java
+    // Safe pattern for initializing client code from a common entrypoint
+    EnvExecutor.runInEnv(Env.CLIENT, () -> MyClientSetup::initialize);
+    ```
+  </Accordion>
+</AccordionGroup>

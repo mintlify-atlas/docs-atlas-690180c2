@@ -1,0 +1,214 @@
+---
+title: "Event System"
+description: "Learn how Architectury's cross-platform event system works, how to register listeners, return results, and define your own events."
+keywords: ["events", "EventFactory", "EventResult", "CompoundEventResult", "listener", "register", "invoker"]
+---
+
+Architectury provides a unified event system that works on both Fabric and Forge. Every event is an `Event<T>` instance where `T` is a functional interface. You register a listener by passing an implementation of that interface to `event.register(...)`.
+
+## Core interface
+
+```java
+public interface Event<T> {
+    T invoker();
+
+    void register(T listener);
+    void unregister(T listener);
+    boolean isRegistered(T listener);
+    void clearListeners();
+}
+```
+
+- `register` — adds a listener.
+- `invoker()` — returns a combined proxy that calls all registered listeners when invoked.
+
+## Registering a listener
+
+Most built-in Architectury events are declared as `public static final` fields on an interface. Call `.register(...)` on the field:
+
+```java
+import dev.architectury.event.events.common.PlayerEvent;
+
+// Runs every time a player joins the server
+PlayerEvent.PLAYER_JOIN.register(player -> {
+    System.out.println(player.getScoreboardName() + " joined the server.");
+});
+```
+
+For events that expect a return value, your lambda must return the correct result type:
+
+```java
+import dev.architectury.event.EventResult;
+import dev.architectury.event.events.common.PlayerEvent;
+
+PlayerEvent.DROP_ITEM.register((player, entity) -> {
+    // Prevent the player from dropping items
+    return EventResult.interruptFalse();
+});
+```
+
+## Invoking an event
+
+Architectury events are typically fired inside the API itself. If you define your own event (see [Custom events](#creating-a-custom-event) below), fire it by calling `invoker()` and then calling the listener method on the result:
+
+```java
+// Fires the event — all registered listeners are called in registration order
+MyEvents.SOME_EVENT.invoker().onSomething(arg1, arg2);
+```
+
+## EventResult
+
+`EventResult` controls whether the event continues to other listeners and what outcome is reported.
+
+| Method | Interrupts? | Value |
+|---|---|---|
+| `EventResult.pass()` | No | none |
+| `EventResult.interruptDefault()` | Yes | `null` (fall back to vanilla) |
+| `EventResult.interruptTrue()` | Yes | `true` |
+| `EventResult.interruptFalse()` | Yes | `false` |
+| `EventResult.interrupt(Boolean)` | Yes | the passed `Boolean` value |
+
+```java
+// Pass — do nothing, let other listeners and vanilla handle it
+return EventResult.pass();
+
+// Interrupt and signal success
+return EventResult.interruptTrue();
+
+// Interrupt and signal failure (e.g. cancel the action)
+return EventResult.interruptFalse();
+
+// Interrupt with no specific outcome — fall back to vanilla logic
+return EventResult.interruptDefault();
+
+// Interrupt with a dynamic boolean value
+return EventResult.interrupt(someCondition);
+```
+
+You can inspect the result after firing:
+
+```java
+EventResult result = MyEvents.SOME_EVENT.invoker().check(player);
+if (result.interruptsFurtherEvaluation()) {
+    Boolean value = result.value(); // null means "default"
+}
+```
+
+## CompoundEventResult
+
+`CompoundEventResult<T>` extends the idea of `EventResult` by carrying an extra return object alongside the boolean outcome. Use it when the event needs to replace a value (for example, replacing an item stack or a screen).
+
+```java
+import dev.architectury.event.CompoundEventResult;
+import dev.architectury.event.events.common.PlayerEvent;
+
+PlayerEvent.FILL_BUCKET.register((player, level, stack, target) -> {
+    // Let other listeners and vanilla handle it
+    return CompoundEventResult.pass();
+});
+```
+
+| Method | Interrupts? | Value | Object |
+|---|---|---|---|
+| `CompoundEventResult.pass()` | No | none | `null` |
+| `CompoundEventResult.interrupt(null, obj)` | Yes | default | `obj` |
+| `CompoundEventResult.interruptTrue(obj)` | Yes | `true` | `obj` |
+| `CompoundEventResult.interruptFalse(obj)` | Yes | `false` | `obj` |
+
+```java
+// Interrupt and replace the resulting ItemStack
+return CompoundEventResult.interruptTrue(new ItemStack(Items.WATER_BUCKET));
+```
+
+## EventFactory methods
+
+`EventFactory` provides static factory methods for creating events. Pick the one that matches what your listener returns.
+
+| Method | Listener return type | Behaviour |
+|---|---|---|
+| `createLoop()` | `void` | Calls every listener; ignores return values |
+| `createEventResult()` | `EventResult` | Stops at the first listener that returns an interrupting result |
+| `createCompoundEventResult()` | `CompoundEventResult<T>` | Same as above but carries a return object |
+
+## Creating a custom event
+
+<Tabs>
+  <Tab title="Declare the event">
+    Define a functional interface for your listener and create the event using `EventFactory`:
+
+    ```java
+    import dev.architectury.event.Event;
+    import dev.architectury.event.EventFactory;
+    import dev.architectury.event.EventResult;
+
+    public interface MyEvents {
+        // A simple fire-and-forget event
+        Event<OnTick> TICK = EventFactory.createLoop();
+
+        // An event where listeners can cancel
+        Event<OnBlockBreak> BLOCK_BREAK = EventFactory.createEventResult();
+
+        @FunctionalInterface
+        interface OnTick {
+            void tick(long tickCount);
+        }
+
+        @FunctionalInterface
+        interface OnBlockBreak {
+            EventResult onBreak(BlockPos pos, Player player);
+        }
+    }
+    ```
+  </Tab>
+  <Tab title="Register a listener">
+    Call `.register(...)` with a lambda or method reference anywhere after the event field is initialised:
+
+    ```java
+    MyEvents.TICK.register(tickCount -> {
+        if (tickCount % 20 == 0) {
+            System.out.println("One second elapsed: tick " + tickCount);
+        }
+    });
+
+    MyEvents.BLOCK_BREAK.register((pos, player) -> {
+        if (player.hasEffect(MobEffects.WEAKNESS)) {
+            // Cancel breaking while the player has Weakness
+            return EventResult.interruptFalse();
+        }
+        return EventResult.pass();
+    });
+    ```
+  </Tab>
+  <Tab title="Fire the event">
+    Call `invoker()` and then call the listener method. `EventFactory.createLoop()` returns `void`; `createEventResult()` returns `EventResult`.
+
+    ```java
+    // Firing a void event
+    MyEvents.TICK.invoker().tick(currentTick);
+
+    // Firing a cancellable event and checking the result
+    EventResult result = MyEvents.BLOCK_BREAK.invoker().onBreak(pos, player);
+    if (result.isFalse()) {
+        // A listener cancelled the break
+        event.setCanceled(true);
+    }
+    ```
+  </Tab>
+</Tabs>
+
+## Forge interop annotations
+
+When you use `EventFactory.createConsumerLoop()` or `createEventActorLoop()` and pass a class annotated with `@ForgeEvent` or `@ForgeEventCancellable`, Architectury automatically bridges the event to Forge's event bus on Forge. You do not need to handle this manually.
+
+```java
+@ForgeEvent
+public class MyForgeCompatibleEvent { ... }
+
+// Architectury detects @ForgeEvent and attaches to the Forge bus automatically
+Event<Consumer<MyForgeCompatibleEvent>> MY_EVENT =
+    EventFactory.createConsumerLoop(MyForgeCompatibleEvent.class);
+```
+
+<Note>
+  `@ForgeEvent` and `@ForgeEventCancellable` are only meaningful for Forge interop. On Fabric, the annotation has no effect.
+</Note>

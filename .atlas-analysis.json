@@ -1,0 +1,112 @@
+{
+  "projectType": "sdk-library",
+  "projectName": "Architectury API",
+  "projectDescription": "A cross-platform intermediary API that abstracts Fabric API and Forge API differences, enabling mod developers to write a single codebase that runs on both loaders.",
+  "theme": "luma",
+  "primaryColor": "#5c64f4",
+  "lightColor": "#acb4fc",
+  "darkColor": "#ffffff",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "getting-started/installation",
+              "getting-started/project-setup"
+            ]
+          },
+          {
+            "group": "Core Concepts",
+            "pages": [
+              "concepts/expect-platform",
+              "concepts/environments",
+              "concepts/event-system"
+            ]
+          },
+          {
+            "group": "Guides",
+            "pages": [
+              "guides/registering-content",
+              "guides/networking",
+              "guides/events",
+              "guides/platform-utilities"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "Events",
+            "pages": [
+              "api/events/overview",
+              "api/events/lifecycle-events",
+              "api/events/player-events",
+              "api/events/interaction-events",
+              "api/events/client-events"
+            ]
+          },
+          {
+            "group": "Registry",
+            "pages": [
+              "api/registry/registries",
+              "api/registry/deferred-register",
+              "api/registry/registrar"
+            ]
+          },
+          {
+            "group": "Networking",
+            "pages": [
+              "api/networking/network-manager",
+              "api/networking/network-channel"
+            ]
+          },
+          {
+            "group": "Platform & Utilities",
+            "pages": [
+              "api/platform/platform",
+              "api/platform/mod",
+              "api/utils/env-executor"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "90+ cross-platform event hooks covering player, lifecycle, interaction, block, and client events",
+    "Platform-agnostic registry abstraction with DeferredRegister and Registrar APIs",
+    "Unified networking API for client-server packet communication on both Fabric and Forge",
+    "@ExpectPlatform annotation for writing platform-specific code with a single common interface",
+    "Platform detection utilities (isFabric(), isForge(), getEnvironment()) for runtime branching",
+    "Built-in abstractions for fluids, items, blocks, and creative tabs"
+  ],
+  "publicApiSurface": [
+    "dev.architectury.event.Event<T>",
+    "dev.architectury.event.EventFactory",
+    "dev.architectury.event.EventResult",
+    "dev.architectury.event.CompoundEventResult",
+    "dev.architectury.event.events.common.PlayerEvent",
+    "dev.architectury.event.events.common.LifecycleEvent",
+    "dev.architectury.event.events.common.InteractionEvent",
+    "dev.architectury.event.events.common.BlockEvent",
+    "dev.architectury.event.events.common.EntityEvent",
+    "dev.architectury.event.events.client.ClientLifecycleEvent",
+    "dev.architectury.event.events.client.ClientTickEvent",
+    "dev.architectury.networking.NetworkManager",
+    "dev.architectury.networking.NetworkChannel",
+    "dev.architectury.registry.registries.Registries",
+    "dev.architectury.registry.registries.DeferredRegister<T>",
+    "dev.architectury.registry.registries.Registrar<T>",
+    "dev.architectury.registry.registries.RegistrySupplier<T>",
+    "dev.architectury.platform.Platform",
+    "dev.architectury.platform.Mod",
+    "dev.architectury.utils.Env",
+    "dev.architectury.utils.EnvExecutor"
+  ]
+}

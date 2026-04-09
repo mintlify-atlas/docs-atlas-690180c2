@@ -1,0 +1,113 @@
+---
+title: "@ExpectPlatform"
+description: "Write a single static method signature in common code and provide separate implementations for each platform loader."
+keywords: ["ExpectPlatform", "platform", "Fabric", "Forge", "annotation", "multiplatform"]
+---
+
+`@ExpectPlatform` is an annotation from [Architectury Injectables](https://github.com/architectury/architectury-injectables) that lets you declare a `static` method in your common module and supply a separate implementation for each platform. At compile time, Architectury Plugin rewrites the method body to delegate to the correct platform-specific class.
+
+The annotation lives at `dev.architectury.injectables.annotations.ExpectPlatform`.
+
+## How it works
+
+<Steps>
+  <Step title="Declare the method in common">
+    Annotate a `static` method with `@ExpectPlatform` and throw `AssertionError` in the body. The body is never executed — Architectury Plugin replaces it.
+
+    ```java common/src/main/java/com/example/platform/MyPlatformHelper.java
+    import dev.architectury.injectables.annotations.ExpectPlatform;
+
+    public class MyPlatformHelper {
+        @ExpectPlatform
+        public static String getPlatformName() {
+            // This body is replaced at compile time — never runs.
+            throw new AssertionError();
+        }
+    }
+    ```
+  </Step>
+
+  <Step title="Create the Fabric implementation">
+    The implementation class must be in the same package as the common class, with `Impl` appended to the class name, inside your `fabric` subproject.
+
+    ```java fabric/src/main/java/com/example/platform/MyPlatformHelperImpl.java
+    public class MyPlatformHelperImpl {
+        public static String getPlatformName() {
+            return "Fabric";
+        }
+    }
+    ```
+  </Step>
+
+  <Step title="Create the Forge implementation">
+    Create the same class in the `forge` subproject. The method signature must match the common declaration exactly.
+
+    ```java forge/src/main/java/com/example/platform/MyPlatformHelperImpl.java
+    public class MyPlatformHelperImpl {
+        public static String getPlatformName() {
+            return "Forge";
+        }
+    }
+    ```
+  </Step>
+
+  <Step title="Call the method from common code">
+    Call the annotated method anywhere in your common module. Architectury Plugin ensures the correct platform implementation is invoked at runtime.
+
+    ```java
+    String name = MyPlatformHelper.getPlatformName();
+    // Returns "Fabric" on Fabric, "Forge" on Forge
+    ```
+  </Step>
+</Steps>
+
+## Naming convention
+
+The platform implementation class name is derived automatically: take the common class name and append `Impl`. Both classes must be in the **same package**.
+
+| Common class | Implementation class |
+|---|---|
+| `com.example.MyHelper` | `com.example.MyHelperImpl` |
+| `com.example.platform.Platform` | `com.example.platform.PlatformImpl` |
+
+<Note>
+  Architectury API itself uses `@ExpectPlatform` internally. For example, `Platform.getEnvironment()` is declared in common code with `@ExpectPlatform` and resolved to Fabric- or Forge-specific logic at compile time.
+</Note>
+
+## Requirements and caveats
+
+<Warning>
+  `@ExpectPlatform` only works on `static` methods. Instance methods are not supported.
+</Warning>
+
+<Warning>
+  Both the common annotation and the implementation rewriting require [Architectury Plugin](https://github.com/architectury/architectury-plugin) to be applied to your Gradle build. Without it, calls to `@ExpectPlatform` methods will throw `AssertionError` at runtime.
+</Warning>
+
+<Tip>
+  The method body in the common class is irrelevant — it is replaced entirely. Throwing `AssertionError` is the conventional placeholder and makes it clear the body is not meant to run.
+</Tip>
+
+## Real-world example
+
+The `Platform` class in Architectury API uses `@ExpectPlatform` for every loader-specific method:
+
+```java
+// common module — dev.architectury.platform.Platform
+@ExpectPlatform
+public static Path getGameFolder() {
+    throw new AssertionError();
+}
+
+@ExpectPlatform
+public static Env getEnvironment() {
+    throw new AssertionError();
+}
+
+@ExpectPlatform
+public static boolean isModLoaded(String id) {
+    throw new AssertionError();
+}
+```
+
+The Fabric and Forge subprojects each supply a `PlatformImpl` class with concrete implementations of these methods.

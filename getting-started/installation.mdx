@@ -1,0 +1,129 @@
+---
+title: "Installation"
+description: "Add Architectury API as a dependency to your multiplatform Gradle project."
+keywords: ["installation", "gradle", "dependency", "Fabric", "Forge", "maven", "modrinth", "curseforge"]
+---
+
+Architectury API is published to the Architectury Maven repository. You add it once to your `common` subproject for compilation and once to each platform subproject for the runtime jar.
+
+<Note>
+  Your project must already use [Architectury Loom](https://github.com/architectury/architectury-loom) and [Architectury Plugin](https://github.com/architectury/architectury-plugin). If you haven't set those up yet, see [Project setup](/getting-started/project-setup) first.
+</Note>
+
+## Dependency coordinates
+
+The artifacts follow this pattern:
+
+| Subproject | Group | Artifact | Version |
+|---|---|---|---|
+| `common` | `dev.architectury` | `architectury` | `6.6.{build}` |
+| `fabric` | `dev.architectury` | `architectury-fabric` | `6.6.{build}` |
+| `forge` | `dev.architectury` | `architectury-forge` | `6.6.{build}` |
+
+Find the latest build number on [Modrinth](https://modrinth.com/mod/lhGA9TYQ) or [CurseForge](https://www.curseforge.com/minecraft/mc-mods/419699).
+
+## Add the repository
+
+Add the Architectury Maven repository to any subproject that depends on Architectury API. Place it in the `repositories` block of each relevant `build.gradle`.
+
+```groovy
+repositories {
+    maven { url "https://maven.architectury.dev/" }
+    mavenCentral()
+}
+```
+
+## Add the dependencies
+
+<Steps>
+  <Step title="Common subproject">
+    In `common/build.gradle`, add the common artifact as a compile-time dependency. You reference it with `modCompileOnly` (or `modApi` if you want to expose it to consumers of your API).
+
+    ```groovy common/build.gradle
+    dependencies {
+        modCompileOnly "dev.architectury:architectury:6.6.${build_number}"
+    }
+    ```
+
+    <Tip>
+      Replace `${build_number}` with the specific build number you want, for example `6.6.92`. Pin the version to keep your build reproducible.
+    </Tip>
+  </Step>
+
+  <Step title="Fabric subproject">
+    In `fabric/build.gradle`, add the Fabric artifact as a runtime dependency using `modImplementation`. This bundles or requires the correct platform jar at runtime.
+
+    ```groovy fabric/build.gradle
+    dependencies {
+        modImplementation "dev.architectury:architectury-fabric:6.6.${build_number}"
+    }
+    ```
+  </Step>
+
+  <Step title="Forge subproject">
+    In `forge/build.gradle`, add the Forge artifact the same way.
+
+    ```groovy forge/build.gradle
+    dependencies {
+        forgeRuntimeLibrary "dev.architectury:architectury-forge:6.6.${build_number}"
+    }
+    ```
+
+    <Note>
+      On Forge you typically use `forgeRuntimeLibrary` so the artifact is included in the classpath without being packed into your mod jar.
+    </Note>
+  </Step>
+</Steps>
+
+## Full example
+
+The following shows the dependency blocks for all three subprojects together for reference.
+
+<CodeGroup>
+
+```groovy common/build.gradle
+repositories {
+    maven { url "https://maven.architectury.dev/" }
+}
+
+dependencies {
+    modCompileOnly "dev.architectury:architectury:6.6.92"
+}
+```
+
+```groovy fabric/build.gradle
+repositories {
+    maven { url "https://maven.architectury.dev/" }
+}
+
+dependencies {
+    modImplementation "dev.architectury:architectury-fabric:6.6.92"
+}
+```
+
+```groovy forge/build.gradle
+repositories {
+    maven { url "https://maven.architectury.dev/" }
+}
+
+dependencies {
+    forgeRuntimeLibrary "dev.architectury:architectury-forge:6.6.92"
+}
+```
+
+</CodeGroup>
+
+## Verify the installation
+
+After syncing Gradle, confirm that `dev.architectury.event.events.common.LifecycleEvent` is resolvable in your `common` sources. If it is, the dependency is wired correctly.
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Project setup" icon="gear" href="/getting-started/project-setup">
+    Configure the subproject structure and entrypoints for Fabric and Forge.
+  </Card>
+  <Card title="Registering content" icon="cube" href="/guides/registering-content">
+    Use the registry abstraction to register blocks, items, and entities.
+  </Card>
+</CardGroup>

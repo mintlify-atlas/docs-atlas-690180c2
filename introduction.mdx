@@ -1,0 +1,84 @@
+---
+title: "Introduction"
+description: "Architectury API is a cross-platform intermediary API for Minecraft mod development, abstracting the differences between Fabric and Forge so you can write shared code once."
+keywords: ["architectury", "multiplatform", "Fabric", "Forge", "mod", "introduction"]
+---
+
+Architectury API is an intermediary library for Minecraft mod development targeting **1.19.2**. It provides a unified API surface that abstracts the differences between [Fabric API](https://github.com/FabricMC/fabric) and [Forge API](https://github.com/MinecraftForge/MinecraftForge), letting you write your mod logic once and deploy it on both platforms.
+
+## What Architectury API provides
+
+<CardGroup cols={2}>
+  <Card title="90+ event hooks" icon="bolt" href="/api/events/overview">
+    Player, lifecycle, interaction, block, entity, and client events — all unified across loaders. Subscribe using the same API regardless of platform.
+  </Card>
+  <Card title="Registry abstraction" icon="database" href="/api/registry/registries">
+    Register blocks, items, entities, and more with a single API that delegates to Fabric's or Forge's registration system at runtime.
+  </Card>
+  <Card title="Networking" icon="network-wired" href="/api/networking/network-manager">
+    Send and receive packets between client and server without any loader-specific code via `NetworkManager` and `NetworkChannel`.
+  </Card>
+  <Card title="Platform utilities" icon="layer-group" href="/api/platform/platform">
+    Detect the current loader, environment, and loaded mods at runtime using `Platform`. Check `Platform.isFabric()`, `Platform.isForge()`, and `Platform.isModLoaded(id)`.
+  </Card>
+</CardGroup>
+
+## The Architectury ecosystem
+
+Architectury API is one part of a three-component toolchain. You need all three to build a multiplatform mod.
+
+| Component | Role |
+|---|---|
+| **Architectury API** | Runtime library: events, registries, networking, platform helpers |
+| [Architectury Loom](https://github.com/architectury/architectury-loom) | Gradle plugin (fork of Fabric Loom) that adds multiplatform build support |
+| [Architectury Plugin](https://github.com/architectury/architectury-plugin) | Gradle plugin that processes `@ExpectPlatform` annotations and wires subprojects together |
+
+<Note>
+  Architectury API is **optional**. You can build a multiplatform mod using only Architectury Loom and Architectury Plugin. Add this API when you want the abstracted events, registries, and networking it provides.
+</Note>
+
+## Platforms supported
+
+This version of Architectury API targets **Minecraft 1.19.2** and supports two mod loaders:
+
+- **Fabric** — requires Fabric Loader ≥ 0.14.0 and Fabric API ≥ 0.66.0
+- **Forge** — requires Forge 43.2.0+
+
+## `@ExpectPlatform`
+
+`@ExpectPlatform` (from [Architectury Injectables](https://github.com/architectury/architectury-plugin)) lets you declare a `static` method in your common module and supply separate implementations for Fabric and Forge. Architectury Plugin replaces the method body at compile time so the correct platform implementation is called at runtime.
+
+```java
+// common module
+public class MyPlatformHelper {
+    @ExpectPlatform
+    public static String getPlatformName() {
+        throw new AssertionError(); // replaced at compile time
+    }
+}
+```
+
+See [ExpectPlatform](/concepts/expect-platform) for the full explanation and naming conventions.
+
+## Get started
+
+<CardGroup cols={2}>
+  <Card title="Installation" icon="download" href="/getting-started/installation">
+    Add Architectury API to your multiplatform Gradle project.
+  </Card>
+  <Card title="Project setup" icon="gear" href="/getting-started/project-setup">
+    Understand the common/fabric/forge subproject structure and wire everything together.
+  </Card>
+  <Card title="Core concepts" icon="lightbulb" href="/concepts/expect-platform">
+    Learn how `@ExpectPlatform`, environments, and the event system work.
+  </Card>
+  <Card title="API reference" icon="code" href="/api/events/overview">
+    Browse the full public API surface for events, registries, and networking.
+  </Card>
+</CardGroup>
+
+## Resources
+
+- [GitHub repository](https://github.com/architectury/architectury-api) — source code and issue tracker
+- [Discord](https://discord.gg/C2RdJDpRBP) — community support and discussion
+- [Mod templates](https://github.com/architectury/architectury-templates) — project templates to get started quickly

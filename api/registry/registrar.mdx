@@ -1,0 +1,231 @@
+---
+title: "Registrar"
+description: "Low-level interface for registering and querying entries in a single Minecraft registry."
+keywords: ["Registrar", "registry", "register", "RegistrySupplier", "listen", "Fabric", "Forge"]
+---
+
+`Registrar<T>` is the low-level interface for a single Minecraft registry. You can register new entries, look up existing ones by ID or raw ID, and subscribe to registration events. It also implements `Iterable<T>`, so you can iterate all entries in the registry.
+
+You do not normally need to use `Registrar` directly. [`DeferredRegister`](/api/registry/deferred-register) is more ergonomic for the common case of declaring static registry entries at class-load time. Use `Registrar` directly when you need runtime lookups, advanced iteration, or the `listen` callback.
+
+---
+
+## Obtaining a `Registrar`
+
+```java
+Registries registries = Registries.get("mymod");
+Registrar<Block> blockRegistrar = registries.get(Registry.BLOCK_REGISTRY);
+```
+
+You can also obtain one from a `DeferredRegister`:
+
+```java
+Registrar<Block> registrar = MY_BLOCKS.getRegistrar();
+```
+
+---
+
+## Registering entries
+
+### `register(ResourceLocation id, Supplier<E> supplier)`
+
+Registers a new entry. Returns a `RegistrySupplier<E>` that resolves once the entry is live.
+
+<ParamField path="id" type="ResourceLocation" required>
+  The full registry name (namespace + path).
+</ParamField>
+
+<ParamField path="supplier" type="Supplier<E>" required>
+  A factory that creates the registry entry. Called at the appropriate time for the platform.
+</ParamField>
+
+```java
+RegistrySupplier<Block> myBlock = blockRegistrar.register(
+    new ResourceLocation("mymod", "my_block"),
+    MyBlock::new
+);
+```
+
+---
+
+## Wrapping existing objects
+
+### `delegate(ResourceLocation id)`
+
+Returns a `RegistrySupplier<T>` that lazily delegates to an already-registered entry by ID. Does not register anything new — useful for referencing vanilla entries.
+
+<ParamField path="id" type="ResourceLocation" required>
+  The ID of the existing entry to wrap.
+</ParamField>
+
+```java
+RegistrySupplier<Block> grassRef =
+    blockRegistrar.delegate(new ResourceLocation("minecraft", "grass_block"));
+```
+
+---
+
+### `wrap(T obj)`
+
+Wraps an already-registered object in a `RegistrySupplier`. Calls `getId(obj)` internally and throws `IllegalArgumentException` if the object has no registry ID.
+
+<ParamField path="obj" type="T" required>
+  A registered object. Must already be in the registry.
+</ParamField>
+
+```java
+RegistrySupplier<Block> supplier = blockRegistrar.wrap(Blocks.STONE);
+```
+
+---
+
+## Lookups
+
+### `getId(T obj)`
+
+Returns the `ResourceLocation` of a registered object, or `null` if not registered.
+
+### `getRawId(T obj)`
+
+Returns the numeric raw ID of a registered object.
+
+### `getKey(T obj)`
+
+Returns an `Optional<ResourceKey<T>>` containing the registry key of the object.
+
+### `get(ResourceLocation id)`
+
+Looks up an entry by `ResourceLocation`. Returns `null` if not found.
+
+### `byRawId(int rawId)`
+
+Looks up an entry by its numeric raw ID. Returns `null` if not found.
+
+### `contains(ResourceLocation id)`
+
+Returns `true` if an entry with the given ID exists in the registry.
+
+### `containsValue(T obj)`
+
+Returns `true` if the given object is registered.
+
+```java
+boolean exists = blockRegistrar.contains(new ResourceLocation("mymod", "my_block"));
+Block block    = blockRegistrar.get(new ResourceLocation("minecraft", "stone"));
+int rawId      = blockRegistrar.getRawId(Blocks.STONE);
+```
+
+---
+
+## Iteration and enumeration
+
+### `getIds()`
+
+Returns an unmodifiable `Set<ResourceLocation>` of all registered IDs.
+
+### `entrySet()`
+
+Returns a `Set<Map.Entry<ResourceKey<T>, T>>` of all registry entries.
+
+### `key()`
+
+Returns the `ResourceKey<? extends Registry<T>>` that identifies this registry.
+
+```java
+for (ResourceLocation id : blockRegistrar.getIds()) {
+    Block block = blockRegistrar.get(id);
+    // ...
+}
+
+// Or iterate values directly (Registrar<T> extends Iterable<T>)
+for (Block block : blockRegistrar) {
+    // ...
+}
+```
+
+---
+
+## Listening to registration events
+
+### `listen(ResourceLocation id, Consumer<T> callback)`
+
+Subscribes to the registration of a specific entry. The callback is called when the entry becomes available. If the entry is already registered when `listen` is called, the callback fires immediately.
+
+<ParamField path="id" type="ResourceLocation" required>
+  The registry name of the entry to watch.
+</ParamField>
+
+<ParamField path="callback" type="Consumer<T>" required>
+  Called with the registered object once it is available.
+</ParamField>
+
+<Note>
+  **Platform behaviour:**
+  - **Fabric** — called when the entry is registered.
+  - **Forge** — called when the entry is registered, or after Minecraft has started if registration already occurred.
+</Note>
+
+---
+
+### `listen(RegistrySupplier<R> supplier, Consumer<R> callback)`
+
+Convenience overload that accepts a `RegistrySupplier` instead of a raw `ResourceLocation`. Delegates to `listen(supplier.getId(), ...)`.
+
+<ParamField path="supplier" type="RegistrySupplier<R>" required>
+  The supplier referencing the entry to watch.
+</ParamField>
+
+<ParamField path="callback" type="Consumer<R>" required>
+  Called with the registered object once it is available.
+</ParamField>
+
+---
+
+## Using `listen` for post-registration setup
+
+A common pattern is using `listen` to run setup that requires the registered object to exist, such as adding the block to a creative tab or attaching a render layer.
+
+```java
+import dev.architectury.registry.registries.DeferredRegister;
+import dev.architectury.registry.registries.RegistrySupplier;
+import net.minecraft.client.renderer.RenderType;
+import net.minecraft.client.renderer.ItemBlockRenderTypes;
+import net.minecraft.core.Registry;
+import net.minecraft.world.level.block.Block;
+
+public class MyBlocks {
+    public static final DeferredRegister<Block> BLOCKS =
+        DeferredRegister.create("mymod", Registry.BLOCK_REGISTRY);
+
+    public static final RegistrySupplier<Block> GLASS_BOX =
+        BLOCKS.register("glass_box", GlassBoxBlock::new);
+
+    public static void clientInit() {
+        // Listen fires immediately on Fabric, or after RegistryEvent on Forge.
+        BLOCKS.getRegistrar().listen(GLASS_BOX, block -> {
+            ItemBlockRenderTypes.setRenderLayer(block, RenderType.translucent());
+        });
+    }
+}
+```
+
+Alternatively, call `listen` directly on the `RegistrySupplier`:
+
+```java
+GLASS_BOX.listen(block -> {
+    ItemBlockRenderTypes.setRenderLayer(block, RenderType.translucent());
+});
+```
+
+---
+
+## `Registrar` vs `DeferredRegister`
+
+| | `Registrar` | `DeferredRegister` |
+|---|---|---|
+| Declaration style | Manual | Static fields |
+| Timing management | Manual | Automatic |
+| Returns | `RegistrySupplier<T>` | `RegistrySupplier<T>` |
+| Best for | Runtime registration, lookups, iteration | Declaring mod content at class-load time |
+
+Use `DeferredRegister` when you are declaring the static content of your mod. Use `Registrar` directly when you need to look up, iterate, or listen to entries at runtime.

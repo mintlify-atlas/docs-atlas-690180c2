@@ -1,97 +1,63 @@
 ---
-title: "Introduction"
-description: "Welcome to the new home for your documentation"
+title: "Architectury API"
+description: "A cross-platform intermediary API that abstracts Fabric API and Forge API differences, enabling mod developers to write a single codebase that runs on both loaders."
 ---
 
-## Setting up
+Architectury API is an intermediary library for Minecraft mod development. It provides a unified API surface that abstracts the differences between [Fabric API](https://github.com/FabricMC/fabric) and [Forge API](https://github.com/MinecraftForge/MinecraftForge), letting you write your mod logic once and run it on both platforms.
 
-Get your documentation site up and running in minutes.
-
-<Card
-  title="Start here"
-  icon="rocket"
-  href="/quickstart"
-  horizontal
->
-  Follow our three step quickstart guide.
-</Card>
-
-## Make it yours
-
-Design a docs site that looks great and empowers your users.
-
-<Columns cols={2}>
-  <Card
-    title="Edit locally"
-    icon="pen-to-square"
-    href="/development"
-  >
-    Edit your docs locally and preview them in real time.
+<CardGroup cols={2}>
+  <Card title="Installation" icon="download" href="/getting-started/installation">
+    Add Architectury API to your multiplatform mod project
   </Card>
-  <Card
-    title="Customize your site"
-    icon="palette"
-    href="/essentials/settings"
-  >
-    Customize the design and colors of your site to match your brand.
+  <Card title="Project Setup" icon="gear" href="/getting-started/project-setup">
+    Configure your Gradle build for multiplatform development
   </Card>
-    <Card
-    title="Set up navigation"
-    icon="map"
-    href="/essentials/navigation"
-  >
-    Organize your docs to help users find what they need and succeed with your product.
+  <Card title="Event System" icon="bolt" href="/concepts/event-system">
+    Learn how Architectury's cross-platform event system works
   </Card>
-  <Card
-    title="API documentation"
-    icon="terminal"
-    href="/api-reference/introduction"
-  >
-    Auto-generate API documentation from OpenAPI specifications.
+  <Card title="API Reference" icon="code" href="/api/events/overview">
+    Browse the full public API surface
   </Card>
-</Columns>
+</CardGroup>
 
-## Create beautiful pages
+## What Architectury API provides
 
-Everything you need to create world-class documentation.
+<CardGroup cols={2}>
+  <Card title="90+ Event Hooks" icon="webhook" href="/api/events/overview">
+    Player, lifecycle, interaction, block, entity, and client events — all unified across loaders
+  </Card>
+  <Card title="Registry Abstraction" icon="database" href="/api/registry/registries">
+    Register blocks, items, entities, and more with a single API that works on Fabric and Forge
+  </Card>
+  <Card title="Networking" icon="network-wired" href="/api/networking/network-manager">
+    Send and receive packets between client and server without loader-specific code
+  </Card>
+  <Card title="Platform Utilities" icon="layer-group" href="/api/platform/platform">
+    Detect the current platform, environment, and loaded mods at runtime
+  </Card>
+</CardGroup>
 
-<Columns cols={2}>
-  <Card
-    title="Write with MDX"
-    icon="pen-fancy"
-    href="/essentials/markdown"
-  >
-    Use MDX to style your docs pages.
-  </Card>
-  <Card
-    title="Code samples"
-    icon="code"
-    href="/essentials/code"
-  >
-    Add sample code to demonstrate how to use your product.
-  </Card>
-  <Card
-    title="Images"
-    icon="image"
-    href="/essentials/images"
-  >
-    Display images and other media.
-  </Card>
-  <Card
-    title="Reusable snippets"
-    icon="recycle"
-    href="/essentials/reusable-snippets"
-  >
-    Write once and reuse across your docs.
-  </Card>
-</Columns>
+## Get started in minutes
 
-## Need inspiration?
+<Steps>
+  <Step title="Add the dependency">
+    Add Architectury API to your `common`, `fabric`, and `forge` subprojects using Gradle.
+    See [Installation](/getting-started/installation) for exact dependency coordinates.
+  </Step>
+  <Step title="Register your content">
+    Use `DeferredRegister` to register blocks, items, and other game objects in a platform-agnostic way.
+    See [Registering Content](/guides/registering-content).
+  </Step>
+  <Step title="Subscribe to events">
+    Register listeners on Architectury events like `PlayerEvent.PLAYER_JOIN` or `LifecycleEvent.SETUP`.
+    See [Events Guide](/guides/events).
+  </Step>
+  <Step title="Use @ExpectPlatform for platform-specific code">
+    When you need loader-specific behavior, use the `@ExpectPlatform` annotation to provide separate implementations per platform.
+    See [ExpectPlatform](/concepts/expect-platform).
+  </Step>
+</Steps>
 
-<Card
-  title="See complete examples"
-  icon="stars"
-  href="https://mintlify.com/customers"
->
-  Browse our showcase of exceptional documentation sites.
-</Card>
+<Note>
+  Architectury API is only one part of the Architectury ecosystem. You also need [Architectury Loom](https://github.com/architectury/architectury-loom) and the [Architectury Plugin](https://github.com/architectury/architectury-plugin) for your Gradle build. See [Project Setup](/getting-started/project-setup) for the complete picture.
+</Note>

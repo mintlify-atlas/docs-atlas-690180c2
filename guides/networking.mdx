@@ -1,0 +1,245 @@
+---
+title: "Networking"
+description: "Send and receive packets between client and server using Architectury's platform-agnostic networking API."
+keywords: ["networking", "NetworkManager", "NetworkChannel", "packets", "S2C", "C2S", "FriendlyByteBuf"]
+---
+
+Architectury provides two networking APIs:
+
+- **`NetworkManager`** — a low-level API for registering raw packet receivers and sending `FriendlyByteBuf`-based payloads.
+- **`NetworkChannel`** — a higher-level wrapper modeled after Forge's `SimpleChannel`. It lets you work with typed message objects instead of byte buffers directly.
+
+Use `NetworkChannel` unless you need fine-grained control over packet transformers or want to avoid the per-channel overhead.
+
+## NetworkChannel (recommended)
+
+### Creating a channel
+
+Create one `NetworkChannel` per mod, stored as a `static final` field.
+
+```java src/main/java/com/example/networking/ModNetwork.java
+import dev.architectury.networking.NetworkChannel;
+import net.minecraft.resources.ResourceLocation;
+
+public class ModNetwork {
+    public static final NetworkChannel CHANNEL =
+        NetworkChannel.create(new ResourceLocation("mymod", "main"));
+}
+```
+
+### Defining a packet class
+
+A packet class holds the data you want to send. Provide an encoder, a decoder, and a handler.
+
+```java src/main/java/com/example/networking/SyncValuePacket.java
+import dev.architectury.networking.NetworkManager.PacketContext;
+import net.minecraft.network.FriendlyByteBuf;
+
+import java.util.function.Supplier;
+
+public class SyncValuePacket {
+    private final int value;
+
+    public SyncValuePacket(int value) {
+        this.value = value;
+    }
+
+    // Decoder — called to construct the packet from the byte buffer
+    public SyncValuePacket(FriendlyByteBuf buf) {
+        this.value = buf.readInt();
+    }
+
+    // Encoder — called to write the packet to the byte buffer
+    public void encode(FriendlyByteBuf buf) {
+        buf.writeInt(value);
+    }
+
+    // Handler — called on the receiving side
+    public void handle(Supplier<PacketContext> contextSupplier) {
+        PacketContext context = contextSupplier.get();
+        // Queue work on the game thread — never access game state directly here
+        context.queue(() -> {
+            System.out.println("Received value: " + value + " on " + context.getEnvironment());
+        });
+    }
+}
+```
+
+### Registering packets
+
+Register each packet class on the channel during mod initialization. Registration must happen before any packet is sent.
+
+```java src/main/java/com/example/networking/ModNetwork.java
+public class ModNetwork {
+    public static final NetworkChannel CHANNEL =
+        NetworkChannel.create(new ResourceLocation("mymod", "main"));
+
+    public static void initialize() {
+        CHANNEL.register(
+            SyncValuePacket.class,
+            SyncValuePacket::encode,    // encoder
+            SyncValuePacket::new,       // decoder (takes FriendlyByteBuf)
+            SyncValuePacket::handle     // handler
+        );
+    }
+}
+```
+
+### Sending packets
+
+<Tabs>
+  <Tab title="Server to client (S2C)">
+    Call `sendToPlayer` from server-side code. The packet is sent to a single player.
+
+    ```java
+    // Send to one player
+    ModNetwork.CHANNEL.sendToPlayer(serverPlayer, new SyncValuePacket(42));
+
+    // Send to multiple players
+    ModNetwork.CHANNEL.sendToPlayers(serverLevel.players(), new SyncValuePacket(42));
+    ```
+  </Tab>
+  <Tab title="Client to server (C2S)">
+    Call `sendToServer` from client-side code only. Annotate the calling method with `@Environment(EnvType.CLIENT)` or guard it with `EnvExecutor`.
+
+    ```java
+    import net.fabricmc.api.EnvType;
+    import net.fabricmc.api.Environment;
+
+    @Environment(EnvType.CLIENT)
+    public static void onButtonClick() {
+        ModNetwork.CHANNEL.sendToServer(new SyncValuePacket(7));
+    }
+    ```
+  </Tab>
+</Tabs>
+
+### Checking receiver capability
+
+Before sending a packet, verify the other side has registered a receiver for it.
+
+```java
+// Client side — check if the server supports this packet type
+boolean serverSupports = ModNetwork.CHANNEL.canServerReceive(SyncValuePacket.class);
+
+// Server side — check if a specific player's client supports this packet type
+boolean playerSupports = ModNetwork.CHANNEL.canPlayerReceive(serverPlayer, SyncValuePacket.class);
+```
+
+---
+
+## NetworkManager (low-level)
+
+Use `NetworkManager` when you need direct control over packet IDs and `FriendlyByteBuf` encoding, or when you are applying custom packet transformers such as `SplitPacketTransformer`.
+
+### Registering a receiver
+
+```java
+import dev.architectury.networking.NetworkManager;
+import net.minecraft.resources.ResourceLocation;
+
+ResourceLocation PACKET_ID = new ResourceLocation("mymod", "my_packet");
+
+// Register a C2S receiver (client-to-server)
+NetworkManager.registerReceiver(
+    NetworkManager.c2s(),
+    PACKET_ID,
+    (buf, context) -> {
+        String message = buf.readUtf();
+        context.queue(() -> {
+            System.out.println("Server received: " + message + " from " + context.getPlayer().getName().getString());
+        });
+    }
+);
+
+// Register an S2C receiver (server-to-client) — must be called only on the client
+// Use EnvExecutor to guard this registration
+EnvExecutor.runInEnv(Env.CLIENT, () -> () ->
+    NetworkManager.registerReceiver(
+        NetworkManager.s2c(),
+        PACKET_ID,
+        (buf, context) -> {
+            String message = buf.readUtf();
+            context.queue(() -> System.out.println("Client received: " + message));
+        }
+    )
+);
+```
+
+### Sending raw packets
+
+<Tabs>
+  <Tab title="Server to client (S2C)">
+    ```java
+    import io.netty.buffer.Unpooled;
+    import net.minecraft.network.FriendlyByteBuf;
+
+    FriendlyByteBuf buf = new FriendlyByteBuf(Unpooled.buffer());
+    buf.writeUtf("Hello, client!");
+
+    // Send to one player
+    NetworkManager.sendToPlayer(serverPlayer, PACKET_ID, buf);
+
+    // Send to multiple players
+    NetworkManager.sendToPlayers(serverLevel.players(), PACKET_ID, buf);
+    ```
+  </Tab>
+  <Tab title="Client to server (C2S)">
+    ```java
+    import io.netty.buffer.Unpooled;
+    import net.minecraft.network.FriendlyByteBuf;
+    import net.fabricmc.api.Environment;
+    import net.fabricmc.api.EnvType;
+
+    @Environment(EnvType.CLIENT)
+    public static void sendToServer() {
+        FriendlyByteBuf buf = new FriendlyByteBuf(Unpooled.buffer());
+        buf.writeUtf("Hello, server!");
+        NetworkManager.sendToServer(PACKET_ID, buf);
+    }
+    ```
+  </Tab>
+</Tabs>
+
+### Checking receiver capability
+
+```java
+// Client side — check if the server can receive this packet ID
+boolean serverSupports = NetworkManager.canServerReceive(PACKET_ID);
+
+// Server side — check if a player's client can receive this packet ID
+boolean playerSupports = NetworkManager.canPlayerReceive(serverPlayer, PACKET_ID);
+```
+
+### Understanding NetworkManager.Side
+
+`NetworkManager.Side` is an enum with two values:
+
+| Value | Direction | Factory methods |
+|---|---|---|
+| `S2C` | Server → Client | `NetworkManager.s2c()` / `NetworkManager.serverToClient()` |
+| `C2S` | Client → Server | `NetworkManager.c2s()` / `NetworkManager.clientToServer()` |
+
+Pass the correct side when registering receivers and collecting packets.
+
+## Custom entity spawn packets
+
+Architectury provides a utility to create the spawn packet required for any non-living custom entity. Override `getAddEntityPacket()` in your entity class:
+
+```java
+import dev.architectury.networking.NetworkManager;
+import net.minecraft.network.protocol.Packet;
+
+public class MyCustomEntity extends Entity {
+    // ...
+
+    @Override
+    public Packet<?> getAddEntityPacket() {
+        return NetworkManager.createAddEntityPacket(this);
+    }
+}
+```
+
+<Note>
+  `createAddEntityPacket` is only needed for entities that do not extend `LivingEntity`. Living entities use vanilla's built-in spawn packet. If your entity needs to send extra data to the client on spawn, implement `EntitySpawnExtension` from Architectury API.
+</Note>

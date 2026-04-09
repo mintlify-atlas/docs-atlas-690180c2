@@ -1,0 +1,288 @@
+---
+title: "NetworkChannel"
+description: "A high-level, message-class-based networking wrapper similar to Forge's SimpleChannel."
+keywords: ["NetworkChannel", "networking", "packets", "SimpleChannel", "S2C", "C2S", "Fabric", "Forge"]
+---
+
+`NetworkChannel` is a high-level networking wrapper built on top of [`NetworkManager`](/api/networking/network-manager). Instead of working with raw `FriendlyByteBuf` instances, you define plain Java message classes with an encoder/decoder pair and a consumer, then send instances of those classes directly.
+
+This API is similar in design to Forge's `SimpleChannel`.
+
+---
+
+## Creating a channel
+
+### `NetworkChannel.create(ResourceLocation id)`
+
+Creates a new `NetworkChannel`. Use a unique `ResourceLocation` as the channel identifier.
+
+<ParamField path="id" type="ResourceLocation" required>
+  A unique identifier for this channel. Used internally as a namespace for per-message packet IDs.
+</ParamField>
+
+```java
+public class MyNetworking {
+    public static final NetworkChannel CHANNEL =
+        NetworkChannel.create(new ResourceLocation("mymod", "main"));
+}
+```
+
+---
+
+## Registering message types
+
+### `register(Class<T> type, BiConsumer<T, FriendlyByteBuf> encoder, Function<FriendlyByteBuf, T> decoder, BiConsumer<T, Supplier<PacketContext>> messageConsumer)`
+
+Registers a message class with the channel. Each registered type gets an automatically-derived packet ID based on the class name. You must call this for every message type before sending or receiving it.
+
+Internally, receivers are registered on both `C2S` and `S2C` sides automatically (the `S2C` receiver is only registered on the client environment).
+
+<ParamField path="type" type="Class<T>" required>
+  The message class to register.
+</ParamField>
+
+<ParamField path="encoder" type="BiConsumer<T, FriendlyByteBuf>" required>
+  Writes the message's fields into the buffer.
+</ParamField>
+
+<ParamField path="decoder" type="Function<FriendlyByteBuf, T>" required>
+  Reads the buffer and constructs a new instance of the message.
+</ParamField>
+
+<ParamField path="messageConsumer" type="BiConsumer<T, Supplier<PacketContext>>" required>
+  Handles the received message. The `Supplier<PacketContext>` gives access to the `PacketContext` (player, thread queue, environment).
+</ParamField>
+
+<Warning>
+  `register` must be called on **both** the client and server sides at startup. Because `NetworkChannel` uses `NetworkManager` under the hood, the consumer runs on the network thread — use `context.get().queue(Runnable)` before accessing game state.
+</Warning>
+
+---
+
+## Sending messages
+
+### `sendToPlayer(ServerPlayer player, T message)`
+
+Sends an `S2C` message to a single player.
+
+<ParamField path="player" type="ServerPlayer" required>
+  The target player. Must not be `null`.
+</ParamField>
+
+<ParamField path="message" type="T" required>
+  An instance of a registered message class.
+</ParamField>
+
+```java
+MyNetworking.CHANNEL.sendToPlayer(serverPlayer, new SyncDataMessage(42, "hello"));
+```
+
+---
+
+### `sendToPlayers(Iterable<ServerPlayer> players, T message)`
+
+Sends the same `S2C` message to multiple players. The packet is encoded once and reused.
+
+<ParamField path="players" type="Iterable<ServerPlayer>" required>
+  The target players. No element may be `null`.
+</ParamField>
+
+<ParamField path="message" type="T" required>
+  An instance of a registered message class.
+</ParamField>
+
+```java
+MyNetworking.CHANNEL.sendToPlayers(level.players(), new SyncDataMessage(42, "hello"));
+```
+
+---
+
+### `sendToServer(T message)` — client only
+
+Sends a `C2S` message to the server. Only callable from client-side code (`@Environment(EnvType.CLIENT)`). Throws `IllegalStateException` if there is no active server connection.
+
+<Warning>
+  Only call this from code that runs on the client. Guard with `EnvExecutor` or `Platform.getEnvironment()` if your calling code is in the common module.
+</Warning>
+
+<ParamField path="message" type="T" required>
+  An instance of a registered message class.
+</ParamField>
+
+```java
+MyNetworking.CHANNEL.sendToServer(new SelectSlotMessage(3));
+```
+
+---
+
+## Capability checks
+
+### `canServerReceive(Class<T> type)` — client only
+
+Returns `true` if the connected server has registered a receiver for the given message type's derived packet ID.
+
+<ParamField path="type" type="Class<T>" required>
+  The message class to check.
+</ParamField>
+
+```java
+if (MyNetworking.CHANNEL.canServerReceive(SelectSlotMessage.class)) {
+    MyNetworking.CHANNEL.sendToServer(new SelectSlotMessage(3));
+}
+```
+
+---
+
+### `canPlayerReceive(ServerPlayer player, Class<T> type)`
+
+Returns `true` if the player's client has registered a receiver for the given message type.
+
+<ParamField path="player" type="ServerPlayer" required>
+  The player to check.
+</ParamField>
+
+<ParamField path="type" type="Class<T>" required>
+  The message class to check.
+</ParamField>
+
+```java
+if (MyNetworking.CHANNEL.canPlayerReceive(player, SyncDataMessage.class)) {
+    MyNetworking.CHANNEL.sendToPlayer(player, new SyncDataMessage(42, "hello"));
+}
+```
+
+---
+
+## Low-level packet conversion
+
+### `toPacket(NetworkManager.Side side, T message)`
+
+Encodes the message and returns a raw `Packet<?>`. Useful when you need to pass a packet to vanilla systems directly (e.g. `Entity#getAddEntityPacket`).
+
+<ParamField path="side" type="NetworkManager.Side" required>
+  The direction the packet will travel.
+</ParamField>
+
+<ParamField path="message" type="T" required>
+  An instance of a registered message class. Throws `NullPointerException` if the message type is not registered.
+</ParamField>
+
+```java
+Packet<?> packet = MyNetworking.CHANNEL.toPacket(NetworkManager.s2c(), new SyncDataMessage(1, "a"));
+player.connection.send(packet);
+```
+
+---
+
+## Complete example
+
+The following example shows a full setup: defining a channel, registering message classes for both directions, and sending/receiving them.
+
+```java
+import dev.architectury.networking.NetworkChannel;
+import dev.architectury.networking.NetworkManager.PacketContext;
+import net.minecraft.network.FriendlyByteBuf;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.server.level.ServerPlayer;
+
+import java.util.function.Supplier;
+
+public class MyNetworking {
+    public static final NetworkChannel CHANNEL =
+        NetworkChannel.create(new ResourceLocation("mymod", "main"));
+
+    public static void init() {
+        // Register both message types on both sides
+        CHANNEL.register(
+            SyncDataMessage.class,
+            SyncDataMessage::encode,
+            SyncDataMessage::decode,
+            SyncDataMessage::handle
+        );
+
+        CHANNEL.register(
+            SelectSlotMessage.class,
+            SelectSlotMessage::encode,
+            SelectSlotMessage::decode,
+            SelectSlotMessage::handle
+        );
+    }
+}
+```
+
+<Tabs>
+  <Tab title="Server → Client (S2C)">
+    Define the message class:
+
+    ```java
+    public record SyncDataMessage(int value, String label) {
+
+        public static void encode(SyncDataMessage msg, FriendlyByteBuf buf) {
+            buf.writeInt(msg.value());
+            buf.writeUtf(msg.label());
+        }
+
+        public static SyncDataMessage decode(FriendlyByteBuf buf) {
+            return new SyncDataMessage(buf.readInt(), buf.readUtf());
+        }
+
+        public static void handle(SyncDataMessage msg, Supplier<PacketContext> contextSupplier) {
+            PacketContext context = contextSupplier.get();
+            context.queue(() -> {
+                // Runs on the main client thread
+                System.out.println("Value: " + msg.value() + ", label: " + msg.label());
+            });
+        }
+    }
+    ```
+
+    Send from the server:
+
+    ```java
+    // Server-side
+    SyncDataMessage message = new SyncDataMessage(42, "inventory_update");
+
+    if (MyNetworking.CHANNEL.canPlayerReceive(player, SyncDataMessage.class)) {
+        MyNetworking.CHANNEL.sendToPlayer(player, message);
+    }
+    ```
+  </Tab>
+  <Tab title="Client → Server (C2S)">
+    Define the message class:
+
+    ```java
+    public record SelectSlotMessage(int slotIndex) {
+
+        public static void encode(SelectSlotMessage msg, FriendlyByteBuf buf) {
+            buf.writeInt(msg.slotIndex());
+        }
+
+        public static SelectSlotMessage decode(FriendlyByteBuf buf) {
+            return new SelectSlotMessage(buf.readInt());
+        }
+
+        public static void handle(SelectSlotMessage msg, Supplier<PacketContext> contextSupplier) {
+            PacketContext context = contextSupplier.get();
+            context.queue(() -> {
+                // Runs on the main server thread
+                ServerPlayer player = (ServerPlayer) context.getPlayer();
+                player.getInventory().selected = msg.slotIndex();
+            });
+        }
+    }
+    ```
+
+    Send from the client:
+
+    ```java
+    // Client-side only
+    if (MyNetworking.CHANNEL.canServerReceive(SelectSlotMessage.class)) {
+        MyNetworking.CHANNEL.sendToServer(new SelectSlotMessage(3));
+    }
+    ```
+  </Tab>
+</Tabs>
+
+<Tip>
+  Use `record` classes for messages whenever possible — they give you a clean, immutable data container with minimal boilerplate.
+</Tip>
